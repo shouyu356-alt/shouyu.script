@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Roblox Script Obfuscator - モバイル対応</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 12px;
+            padding-bottom: 80px;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+        }
+
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 4px;
+            font-size: 1.6em;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.08);
+            word-break: break-word;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 16px;
+            font-size: 0.85em;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .feature {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 6px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 0.75em;
+        }
+
+        .options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 0;
+        }
+
+        .option input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            min-width: 22px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .option label {
+            cursor: pointer;
+            font-weight: 500;
+            color: #333;
+            font-size: 0.8em;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            color: #856404;
+            font-size: 0.8em;
+        }
+
+        .warning strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .editor-section {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .editor-wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-label {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 12px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            font-family: 'Courier New', 'SF Mono', monospace;
+            font-size: 13px;
+            resize: vertical;
+            background: #f8f9fa;
+            -webkit-overflow-scrolling: touch;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        textarea#outputCode {
+            background: #f0f0f0;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .button-group .full-width {
+            grid-column: 1 / -1;
+        }
+
+        button {
+            padding: 14px 12px;
+            font-size: 0.95em;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: white;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            user-select: none;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        .obfuscate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            grid-column: 1 / -1;
+        }
+
+        .obfuscate-btn:active {
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .copy-btn {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .clear-btn {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            grid-column: 1 / -1;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .stat {
+            background: #f8f9fa;
+            padding: 12px 8px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.7em;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            color: #333;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .progress {
+            display: none;
+            margin: 12px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 24px;
+            background: #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.75em;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 0.9em;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            pointer-events: none;
+            backdrop-filter: blur(10px);
+            max-width: 90%;
+            text-align: center;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (min-width: 600px) {
+            .container {
+                max-width: 600px;
+                padding: 24px;
+            }
+
+            .editor-section {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            textarea {
+                height: 350px;
+            }
+
+            .features {
+                grid-template-columns: repeat(4, 1fr);
+            }
+
+            .options {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .button-group {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .obfuscate-btn {
+                grid-column: 1 / 2;
+            }
+
+            .clear-btn {
+                grid-column: 2 / 3;
+            }
+
+            .stats {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                max-width: 1200px;
+                padding: 40px;
+            }
+
+            textarea {
+                height: 450px;
+            }
+
+            h1 {
+                font-size: 2.5em;
+            }
+        }
+
+        /* ダークモード対応 */
+        @media (prefers-color-scheme: dark) {
+            .container {
+                background: rgba(30, 30, 40, 0.95);
+            }
+
+            h1 {
+                color: #8b9cf7;
+            }
+
+            .subtitle {
+                color: #aaa;
+            }
+
+            .option label {
+                color: #ddd;
+            }
+
+            .option {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                padding: 6px 8px;
+            }
+
+            textarea {
+                background: #1a1a2e;
+                border-color: #5a6bd6;
+                color: #e0e0e0;
+            }
+
+            textarea#outputCode {
+                background: #16162a;
+            }
+
+            .stat {
+                background: rgba(255, 255, 255, 0.05);
+                border-left-color: #8b9cf7;
+            }
+
+            .stat-label {
+                color: #999;
+            }
+
+            .stat-value {
+                color: #eee;
+            }
+
+            .warning {
+                background: #3d3a1f;
+                border-color: #b8960f;
+                color: #f0d060;
+            }
+
+            .editor-label {
+                color: #ddd;
+            }
+        }
+
+        /* スクロールバーのスタイリング */
+        textarea::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 3px;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🛡️ Roblox Obfuscator</h1>
+        <div class="subtitle">VM2エンジン搭載 · モバイル対応</div>
+
+        <div class="features">
+            <div class="feature">🔐 VM2保護</div>
+            <div class="feature">🎯 10万+文字</div>
+            <div class="feature">⚡ 高速処理</div>
+            <div class="feature">📱 モバイル対応</div>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ 注意</strong>
+            教育目的および知的財産保護のためのツールです。悪用は禁止されています。
+        </div>
+
+        <div class="options">
+            <div class="option">
+                <input type="checkbox" id="stringEncryption" checked>
+                <label for="stringEncryption">文字列暗号化</label>
+            </div>
+            <div class="option">
+                <input type="checkbox" id="vmProtection" checked>
+                <label for="vmProtection">VM保護</label>
+            </div>
+            <div class="option">
+                <input type="checkbox" id="controlFlow" checked>
+                <label for="controlFlow">制御フロー</label>
+            </div>
+            <div class="option">
+                <input type="checkbox" id="antiDebug" checked>
+                <label for="antiDebug">アンチデバッグ</label>
+            </div>
+            <div class="option">
+                <input type="checkbox" id="constantWrapping" checked>
+                <label for="constantWrapping">定数ラッピング</label>
+            </div>
+            <div class="option">
+                <input type="checkbox" id="deadCode" checked>
+                <label for="deadCode">ダミーコード</label>
+            </div>
+        </div>
+
+        <div class="editor-section">
+            <div class="editor-wrapper">
+                <div class="editor-label">📝 元のスクリプト</div>
+                <textarea id="inputCode" placeholder="Roblox Luaスクリプトを入力...&#10;&#10;例:&#10;local function greet(name)&#10;    print(&#39;Hello, &#39; .. name)&#10;end&#10;&#10;greet(&#39;World&#39;)"></textarea>
+            </div>
+            <div class="editor-wrapper">
+                <div class="editor-label">🔒 難読化済み</div>
+                <textarea id="outputCode" readonly placeholder="難読化結果が表示されます..."></textarea>
+            </div>
+        </div>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="obfuscate-btn" onclick="obfuscateCode()">🔐 難読化実行</button>
+            <button class="copy-btn" onclick="copyOutput()">📋 コピー</button>
+            <button class="download-btn" onclick="downloadTxt()">💾 ダウンロード</button>
+            <button class="clear-btn" onclick="clearAll()">🗑️ クリア</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label">元の文字数</div>
+                <div class="stat-value" id="originalChars">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">難読化後</div>
+                <div class="stat-value" id="obfuscatedChars">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">拡大率</div>
+                <div class="stat-value" id="expansionRatio">0x</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">処理時間</div>
+                <div class="stat-value" id="processTime">0ms</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast通知 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ===== ユーティリティ関数 =====
+        function generateRandomString(length) {
+            const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        function generateRandomVarName() {
+            const prefixes = ['_', '__', '___'];
+            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            return prefix + generateRandomString(Math.floor(Math.random() * 20) + 10);
+        }
+
+        function encryptString(str) {
+            const key = Math.floor(Math.random() * 255) + 1;
+            let encrypted = [];
+            for (let i = 0; i < str.length; i++) {
+                encrypted.push(str.charCodeAt(i) ^ key);
+            }
+            return { encrypted: encrypted, key: key };
+        }
+
+        // ===== Toast通知 =====
+        let toastTimeout = null;
+
+        function showToast(message, duration = 2500) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, duration);
+        }
+
+        // ===== 難読化エンジン =====
+        function createVMEngine() {
+            const vmName = generateRandomVarName();
+            const decoderName = generateRandomVarName();
+            const keyName = generateRandomVarName();
+            
+            return `
+local ${vmName} = {}
+${vmName}.${keyName} = function(${generateRandomVarName()}, ${generateRandomVarName()})
+    local ${generateRandomVarName()} = {}
+    for ${generateRandomVarName()} = 1, #${generateRandomVarName()} do
+        ${generateRandomVarName()}[${generateRandomVarName()}] = string.char(bit32.bxor(${generateRandomVarName()}[${generateRandomVarName()}], ${generateRandomVarName()}))
+    end
+    return table.concat(${generateRandomVarName()})
+end
+
+${vmName}.${decoderName} = function(${generateRandomVarName()})
+    local ${generateRandomVarName()} = {}
+    for ${generateRandomVarName()} in string.gmatch(${generateRandomVarName()}, "[^,]+") do
+        table.insert(${generateRandomVarName()}, tonumber(${generateRandomVarName()}))
+    end
+    return ${generateRandomVarName()}
+end
+`;
+        }
+
+        function createAntiDebug() {
+            const varName = generateRandomVarName();
+            const funcName = generateRandomVarName();
+            return `
+local ${varName} = tick()
+local function ${funcName}()
+    if tick() - ${varName} > 0.5 then
+        while true do end
+    end
+    ${varName} = tick()
+end
+task.spawn(function()
+    while task.wait(0.1) do
+        ${funcName}()
+    end
+end)
+`;
+        }
+
+        function createDummyCode(lines) {
+            let dummy = '';
+            for (let i = 0; i < lines; i++) {
+                const varName = generateRandomVarName();
+                const operations = [
+                    `local ${varName} = ${Math.floor(Math.random() * 1000)}`,
+                    `local ${varName} = "${generateRandomString(20)}"`,
+                    `local ${varName} = function() return ${Math.random()} end`,
+                    `local ${varName} = {${Math.random()}, ${Math.random()}, ${Math.random()}}`,
+                ];
+                dummy += operations[Math.floor(Math.random() * operations.length)] + '\n';
+            }
+            return dummy;
+        }
+
+        function wrapInControlFlow(code) {
+            const stateName = generateRandomVarName();
+            const switchName = generateRandomVarName();
+            const lines = code.split('\n').filter(line => line.trim());
+            
+            if (lines.length === 0) return code;
+            
+            let wrapped = `local ${stateName} = 1\n`;
+            wrapped += `local ${switchName} = {}\n`;
+            
+            lines.forEach((line, index) => {
+                const nextState = index + 2;
+                wrapped += `${switchName}[${index + 1}] = function()\n`;
+                wrapped += `    ${line}\n`;
+                wrapped += `    ${stateName} = ${nextState}\n`;
+                wrapped += `end\n`;
+            });
+            
+            wrapped += `while ${stateName} <= ${lines.length} do\n`;
+            wrapped += `    if ${switchName}[${stateName}] then\n`;
+            wrapped += `        ${switchName}[${stateName}]()\n`;
+            wrapped += `    else\n`;
+            wrapped += `        break\n`;
+            wrapped += `    end\n`;
+            wrapped += `end\n`;
+            
+            return wrapped;
+        }
+
+        function obfuscateVariables(code) {
+            const varPattern = /local\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
+            const varMap = new Map();
+            let match;
+            
+            while ((match = varPattern.exec(code)) !== null) {
+                const originalName = match[1];
+                if (!varMap.has(originalName)) {
+                    varMap.set(originalName, generateRandomVarName());
+                }
+            }
+            
+            varMap.forEach((newName, oldName) => {
+                const regex = new RegExp(`\\b${oldName}\\b`, 'g');
+                code = code.replace(regex, newName);
+            });
+            
+            return code;
+        }
+
+        function expandToTargetSize(code, targetSize) {
+            let currentSize = code.length;
+            let expanded = code;
+            
+            let iterations = 0;
+            while (currentSize < targetSize && iterations < 50) {
+                iterations++;
+                const neededSize = targetSize - currentSize;
+                const dummyLines = Math.min(Math.ceil(neededSize / 80), 300);
+                const dummyCode = createDummyCode(dummyLines);
+                
+                const insertPosition = Math.floor(Math.random() * (expanded.length + 1));
+                expanded = expanded.slice(0, insertPosition) + '\n' + dummyCode + '\n' + expanded.slice(insertPosition);
+                
+                currentSize = expanded.length;
+            }
+            
+            return expanded;
+        }
+
+        // ===== メイン難読化処理 =====
+        async function obfuscateCode() {
+            const startTime = performance.now();
+            const inputCode = document.getElementById('inputCode').value.trim();
+            
+            if (!inputCode) {
+                showToast('⚠️ スクリプトを入力してください', 2000);
+                return;
+            }
+
+            const progress = document.getElementById('progress');
+            const progressFill = document.getElementById('progressFill');
+            progress.style.display = 'block';
+
+            const options = {
+                stringEncryption: document.getElementById('stringEncryption').checked,
+                vmProtection: document.getElementById('vmProtection').checked,
+                controlFlow: document.getElementById('controlFlow').checked,
+                antiDebug: document.getElementById('antiDebug').checked,
+                constantWrapping: document.getElementById('constantWrapping').checked,
+                deadCode: document.getElementById('deadCode').checked,
+            };
+
+            let obfuscated = '';
+
+            // Stage 1: VM Engine
+            progressFill.style.width = '10%';
+            progressFill.textContent = '10%';
+            await sleep(80);
+            
+            if (options.vmProtection) {
+                obfuscated += createVMEngine() + '\n\n';
+            }
+
+            // Stage 2: Anti-Debug
+            progressFill.style.width = '20%';
+            progressFill.textContent = '20%';
+            await sleep(80);
+            
+            if (options.antiDebug) {
+                obfuscated += createAntiDebug() + '\n\n';
+            }
+
+            // Stage 3: Variable Obfuscation
+            progressFill.style.width = '40%';
+            progressFill.textContent = '40%';
+            await sleep(80);
+            
+            let processedCode = obfuscateVariables(inputCode);
+
+            // Stage 4: String Encryption
+            progressFill.style.width = '60%';
+            progressFill.textContent = '60%';
+            await sleep(80);
+            
+            if (options.stringEncryption) {
+                processedCode = processedCode.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, (match) => {
+                    const str = match.slice(1, -1);
+                    const { encrypted, key } = encryptString(str);
+                    return `loadstring(string.char(${encrypted.map(c => c ^ key).join(',')}))()`;
+                });
+            }
+
+            // Stage 5: Control Flow
+            progressFill.style.width = '80%';
+            progressFill.textContent = '80%';
+            await sleep(80);
+            
+            if (options.controlFlow) {
+                processedCode = wrapInControlFlow(processedCode);
+            }
+
+            obfuscated += processedCode;
+
+            // Stage 6: Expand to target size
+            progressFill.style.width = '90%';
+            progressFill.textContent = '90%';
+            await sleep(80);
+            
+            const targetSize = 100000 + Math.floor(Math.random() * 50000);
+            obfuscated = expandToTargetSize(obfuscated, targetSize);
+
+            // Stage 7: Final dummy code
+            if (options.deadCode) {
+                obfuscated = createDummyCode(300) + '\n' + obfuscated + '\n' + createDummyCode(300);
+            }
+
+            // Complete
+            progressFill.style.width = '100%';
+            progressFill.textContent = '100%';
+            
+            const endTime = performance.now();
+            const processTime = Math.round(endTime - startTime);
+
+            document.getElementById('outputCode').value = obfuscated;
+            document.getElementById('originalChars').textContent = inputCode.length.toLocaleString();
+            document.getElementById('obfuscatedChars').textContent = obfuscated.length.toLocaleString();
+            document.getElementById('expansionRatio').textContent = Math.round(obfuscated.length / Math.max(inputCode.length, 1)) + 'x';
+            document.getElementById('processTime').textContent = processTime + 'ms';
+
+            showToast(`✅ 難読化完了！ ${obfuscated.length.toLocaleString()}文字`, 2000);
+
+            setTimeout(() => {
+                progress.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 800);
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // ===== UI操作 =====
+        function copyOutput() {
+            const outputCode = document.getElementById('outputCode');
+            if (!outputCode.value) {
+                showToast('⚠️ コピーするコードがありません', 2000);
+                return;
+            }
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(outputCode.value).then(() => {
+                    showToast('📋 クリップボードにコピーしました！', 2000);
+                }).catch(() => {
+                    fallbackCopy(outputCode);
+                });
+            } else {
+                fallbackCopy(outputCode);
+            }
+        }
+
+        function fallbackCopy(textarea) {
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('📋 コピーしました！', 2000);
+            } catch (e) {
+                showToast('⚠️ コピーに失敗しました', 2000);
+            }
+            textarea.blur();
+        }
+
+        function downloadTxt() {
+            const outputCode = document.getElementById('outputCode').value;
+            if (!outputCode) {
+                showToast('⚠️ ダウンロードするコードがありません', 2000);
+                return;
+            }
+            
+            try {
+                const blob = new Blob([outputCode], { type: 'text/plain;charset=utf-8' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                link.download = `obfuscated_script_${timestamp}.txt`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                
+                showToast('💾 ダウンロード完了！', 2000);
+            } catch (e) {
+                showToast('⚠️ ダウンロードに失敗しました', 2000);
+            }
+        }
+
+        function clearAll() {
+            document.getElementById('inputCode').value = '';
+            document.getElementById('outputCode').value = '';
+            document.getElementById('originalChars').textContent = '0';
+            document.getElementById('obfuscatedChars').textContent = '0';
+            document.getElementById('expansionRatio').textContent = '0x';
+            document.getElementById('processTime').textContent = '0ms';
+            showToast('🗑️ クリアしました', 1500);
+        }
+
+        // ===== イベント =====
+        document.getElementById('inputCode').addEventListener('input', function() {
+            document.getElementById('originalChars').textContent = this.value.length.toLocaleString();
+        });
+
+        // タッチデバイスでのダブルタップズームを防止
+        document.addEventListener('touchend', function(e) {
+            if (e.target.tagName === 'BUTTON') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // スマホでキーボード表示時にレイアウト調整
+        if ('visualViewport' in window) {
+            window.visualViewport.addEventListener('resize', function() {
+                const activeElement = document.activeElement;
+                if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                    setTimeout(() => {
+                        activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 200);
+                }
+            });
+        }
+
+        console.log('🛡️ Roblox Obfuscator - モバイル対応版 loaded');
+    </script>
+</body>
+</html>

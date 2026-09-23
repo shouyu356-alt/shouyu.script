@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ようこそ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+        }
+
+        .welcome-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 60px 80px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            animation: fadeIn 1.5s ease-in-out;
+        }
+
+        .welcome-card h1 {
+            font-size: 4rem;
+            color: #fff;
+            text-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+
+        .welcome-card p {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 10px;
+            letter-spacing: 5px;
+            font-weight: 300;
+        }
+
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.9) translateY(20px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .welcome-card::before {
+            content: "✨";
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 10px;
+            opacity: 0.7;
+        }
+
+        .top-button {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            background: #5865F2;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .top-button:hover {
+            transform: scale(1.05);
+            background: #4752c4;
+            box-shadow: 0 12px 35px rgba(88, 101, 242, 0.6);
+        }
+
+        .top-button svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        @media (max-width: 600px) {
+            .top-button {
+                top: 20px;
+                right: 20px;
+                padding: 10px 18px;
+                font-size: 1rem;
+            }
+            .top-button svg {
+                width: 20px;
+                height: 20px;
+            }
+            .welcome-card {
+                padding: 40px 30px;
+                margin: 20px;
+            }
+            .welcome-card h1 {
+                font-size: 2.8rem;
+            }
+            .welcome-card p {
+                font-size: 1rem;
+                letter-spacing: 3px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <a href="https://discord.gg/pBfu7tz83N" target="_blank" class="top-button">
+        <svg viewBox="0 0 127.14 96.36" xmlns="http://www.w3.org/2000/svg">
+            <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72,72,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72,72,0,0,0,45.64,0,105.15,105.15,0,0,0,19.39,8.07C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S53.86,46,53.86,53,48.64,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.19,60,73.19,53s5-12.74,11.44-12.74S96.12,46,96.12,53,90.89,65.69,84.69,65.69Z"/>
+        </svg>
+        Discord
+    </a>
+
+    <div class="welcome-card">
+        <h1>ようこそ！</h1>
+        <p>— あなたのサイトへ —</p>
+    </div>
+
+</body>
+</html>

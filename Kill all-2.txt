@@ -1,0 +1,564 @@
+-- =====================================================
+-- Kill All 単体機能 (スマホ対応・コンパクトUI)
+-- =====================================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local Camera = Workspace.CurrentCamera
+
+-- =====================================================
+-- 変数
+-- =====================================================
+local isRunning = false
+local killTask = nil
+local currentBlobman = nil
+local maxRetries = 5
+local TP_WAIT = 0.02
+local GRAB_WAIT = 0.005
+local isThirdPerson = false
+
+-- =====================================================
+-- 3人称視点
+-- =====================================================
+local function EnableThirdPerson()
+    isThirdPerson = true
+    pcall(function()
+        LocalPlayer.CameraMode = Enum.CameraMode.Classic
+        Camera.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+        end
+        LocalPlayer.CameraMaxZoomDistance = 100
+        LocalPlayer.CameraMinZoomDistance = 0.5
+    end)
+end
+
+local function DisableThirdPerson()
+    isThirdPerson = false
+    pcall(function()
+        LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        Camera.CameraType = Enum.CameraType.Custom
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+        end
+        LocalPlayer.CameraMaxZoomDistance = 0
+        LocalPlayer.CameraMinZoomDistance = 0
+    end)
+end
+
+-- =====================================================
+-- ブロブマンに確実に乗る
+-- =====================================================
+local function MountBlobman(blobman)
+    if not blobman then return false end
+    
+    local char = LocalPlayer.Character
+    if not char then return false end
+    
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    -- 既に乗ってるかチェック
+    if humanoid.SeatPart and humanoid.SeatPart.Parent == blobman then
+        return true
+    end
+    
+    local seat = blobman:FindFirstChild("VehicleSeat")
+    if not seat then
+        -- VehicleSeatがない場合、Seatを探す
+        for _, child in ipairs(blobman:GetDescendants()) do
+            if child:IsA("VehicleSeat") or child:IsA("Seat") then
+                seat = child
+                break
+            end
+        end
+    end
+    
+    if not seat then return false end
+    
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return false end
+    
+    -- 座る位置に移動
+    local targetCF = seat.CFrame + Vector3.new(0, 1.5, 0)
+    rootPart.CFrame = targetCF
+    rootPart.Velocity = Vector3.zero
+    rootPart.RotVelocity = Vector3.zero
+    
+    task.wait(0.1)
+    
+    -- 座らせる（最大5回リトライ）
+    for i = 1, 5 do
+        pcall(function()
+            seat:Sit(humanoid)
+        end)
+        task.wait(0.1)
+        
+        if humanoid.SeatPart == seat then
+            return true
+        end
+        
+        -- 位置を微調整して再試行
+        rootPart.CFrame = seat.CFrame + Vector3.new(0, 1.5 + (i * 0.2), 0)
+        task.wait(0.1)
+    end
+    
+    return humanoid.SeatPart == seat
+end
+
+-- =====================================================
+-- ブロブマンを取得 / スポーン（確実に乗る）
+-- =====================================================
+local function GetSeatedBlobman()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+    local seat = humanoid.SeatPart
+    if not seat or not seat:IsA("VehicleSeat") then return nil end
+    local obj = seat
+    while obj do
+        if obj:IsA("Model") and obj.Name == "CreatureBlobman" then return obj end
+        obj = obj.Parent
+    end
+    return nil
+end
+
+local function SpawnBlobman()
+    -- 既に乗ってるブロブマンを確認
+    local seated = GetSeatedBlobman()
+    if seated then 
+        currentBlobman = seated 
+        return seated 
+    end
+
+    -- 既存のブロブマンを確認（近くにあればそれを使う）
+    if currentBlobman and currentBlobman.Parent then
+        local blobPos = nil
+        if currentBlobman.PrimaryPart then
+            blobPos = currentBlobman.PrimaryPart.Position
+        else
+            local part = currentBlobman:FindFirstChildWhichIsA("BasePart")
+            if part then blobPos = part.Position end
+        end
+        local char = LocalPlayer.Character
+        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+        local localPos = rootPart and rootPart.Position
+        if blobPos and localPos and (blobPos - localPos).Magnitude < 500 then
+            -- 乗る
+            if MountBlobman(currentBlobman) then
+                return currentBlobman
+            end
+        else
+            pcall(function() currentBlobman:Destroy() end)
+            currentBlobman = nil
+        end
+    end
+
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil end
+
+    local spawnRemote = ReplicatedStorage:FindFirstChild("MenuToys") and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
+    if not spawnRemote then return nil end
+
+    -- スポーン（最大5回リトライ）
+    local blobman = nil
+    for attempt = 1, 5 do
+        local spawnPos = rootPart.CFrame * CFrame.new(0, 0, -5)
+        pcall(function() 
+            spawnRemote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 127, 0)) 
+        end)
+        
+        task.wait(0.3)
+        
+        local toyFolderName = LocalPlayer.Name .. "SpawnedInToys"
+        local toyFolder = Workspace:FindFirstChild(toyFolderName)
+        if toyFolder then
+            blobman = toyFolder:FindFirstChild("CreatureBlobman")
+            if blobman then 
+                currentBlobman = blobman
+                break 
+            end
+        end
+        task.wait(0.2)
+    end
+
+    if not blobman then return nil end
+    currentBlobman = blobman
+
+    -- 確実に乗る
+    if MountBlobman(blobman) then
+        return blobman
+    end
+
+    -- 乗れなかったら再試行（もう一度スポーン）
+    for retry = 1, 3 do
+        pcall(function() 
+            local destroyToy = ReplicatedStorage:FindFirstChild("MenuToys") and ReplicatedStorage.MenuToys:FindFirstChild("DestroyToy")
+            if destroyToy and blobman then
+                destroyToy:FireServer(blobman)
+            end
+        end)
+        task.wait(0.3)
+        
+        local spawnPos = rootPart.CFrame * CFrame.new(0, 0, -5)
+        pcall(function() 
+            spawnRemote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 127, 0)) 
+        end)
+        task.wait(0.3)
+        
+        local toyFolderName = LocalPlayer.Name .. "SpawnedInToys"
+        local toyFolder = Workspace:FindFirstChild(toyFolderName)
+        if toyFolder then
+            blobman = toyFolder:FindFirstChild("CreatureBlobman")
+            if blobman then
+                currentBlobman = blobman
+                if MountBlobman(blobman) then
+                    return blobman
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- =====================================================
+-- プレイヤーをキル
+-- =====================================================
+local function KillPlayer(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return false end
+    local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+
+    for _ = 1, maxRetries do
+        local success = pcall(function()
+            humanoid.BreakJointsOnDeath = false
+            humanoid:ChangeState(Enum.HumanoidStateType.Dead)
+        end)
+        if success and humanoid.Health <= 0 then
+            return true
+        end
+        task.wait(0.005)
+    end
+    return false
+end
+
+-- =====================================================
+-- グラブ＆リリース（ブロブマン用）
+-- =====================================================
+local function GrabRelease(blobman, targetRoot)
+    if not blobman or not targetRoot then return end
+    pcall(function()
+        local script = blobman:FindFirstChild("BlobmanSeatAndOwnerScript")
+        if script then
+            local leftDet = blobman:FindFirstChild("LeftDetector")
+            local leftWeld = leftDet and leftDet:FindFirstChild("LeftWeld")
+            if script:FindFirstChild("CreatureGrab") and leftDet and leftWeld then
+                script.CreatureGrab:FireServer(leftDet, targetRoot, leftWeld)
+            end
+            if script:FindFirstChild("CreatureRelease") and leftDet and leftWeld then
+                script.CreatureRelease:FireServer(leftWeld)
+            end
+        end
+    end)
+end
+
+-- =====================================================
+-- メインループ
+-- =====================================================
+local function ProcessAllPlayers()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local rootPart = char.HumanoidRootPart
+
+    -- ブロブマンを取得（確実に乗るまでリトライ）
+    local blobman = nil
+    for retry = 1, 10 do
+        blobman = SpawnBlobman()
+        if blobman then break end
+        task.wait(0.5)
+    end
+    
+    if not blobman then 
+        -- それでもダメなら強制リセットして再試行
+        pcall(function()
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then humanoid.Health = 0 end
+        end)
+        task.wait(0.5)
+        return 
+    end
+
+    local targets = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            table.insert(targets, player)
+        end
+    end
+
+    for _, player in ipairs(targets) do
+        if not isRunning then break end
+
+        local targetChar = player.Character
+        if not targetChar then continue end
+
+        local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health <= 0 then continue end
+
+        local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then continue end
+
+        rootPart.CFrame = targetRoot.CFrame
+        task.wait(TP_WAIT)
+
+        KillPlayer(player)
+
+        for _ = 1, 2 do
+            GrabRelease(blobman, targetRoot)
+            task.wait(GRAB_WAIT)
+        end
+    end
+end
+
+-- =====================================================
+-- Kill All 開始/停止
+-- =====================================================
+local function StartKillAll()
+    if isRunning then return end
+    isRunning = true
+
+    if killTask then
+        task.cancel(killTask)
+        killTask = nil
+    end
+
+    killTask = task.spawn(function()
+        while isRunning do
+            pcall(ProcessAllPlayers)
+            task.wait()
+        end
+    end)
+end
+
+local function StopKillAll()
+    isRunning = false
+    if killTask then
+        task.cancel(killTask)
+        killTask = nil
+    end
+end
+
+-- =====================================================
+-- コンパクトUI
+-- =====================================================
+local function CreateUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "KillAllUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = game:GetService("CoreGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 140, 0, 110)
+    frame.Position = UDim2.new(0.5, -70, 0.5, -55)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 50)
+    frame.BackgroundTransparency = 0.05
+    frame.BorderSizePixel = 2
+    frame.BorderColor3 = Color3.fromRGB(50, 100, 255)
+    frame.ClipsDescendants = true
+    frame.Parent = screenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 22)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "Kill All"
+    title.TextColor3 = Color3.fromRGB(100, 180, 255)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
+
+    local tpButton = Instance.new("TextButton")
+    tpButton.Size = UDim2.new(0, 55, 0, 18)
+    tpButton.Position = UDim2.new(0, 5, 1, -24)
+    tpButton.BackgroundColor3 = Color3.fromRGB(30, 30, 70)
+    tpButton.BorderSizePixel = 1
+    tpButton.BorderColor3 = Color3.fromRGB(50, 100, 255)
+    tpButton.Text = "1人称"
+    tpButton.TextColor3 = Color3.fromRGB(200, 200, 255)
+    tpButton.TextScaled = true
+    tpButton.Font = Enum.Font.GothamBold
+    tpButton.Parent = frame
+
+    local tpCorner = Instance.new("UICorner")
+    tpCorner.CornerRadius = UDim.new(0, 6)
+    tpCorner.Parent = tpButton
+
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1, 0, 0, 20)
+    status.Position = UDim2.new(0, 0, 0, 24)
+    status.BackgroundTransparency = 1
+    status.Text = "停止"
+    status.TextColor3 = Color3.fromRGB(150, 150, 200)
+    status.TextScaled = true
+    status.Font = Enum.Font.Gotham
+    status.Parent = frame
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 110, 0, 28)
+    button.Position = UDim2.new(0.5, -55, 0, 50)
+    button.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+    button.BorderSizePixel = 0
+    button.Text = "開始"
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamBold
+    button.Parent = frame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = button
+
+    local function UpdateButton()
+        if isRunning then
+            button.Text = "停止"
+            status.Text = "実行中"
+            status.TextColor3 = Color3.fromRGB(100, 255, 150)
+            button.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        else
+            button.Text = "開始"
+            status.Text = "停止"
+            status.TextColor3 = Color3.fromRGB(150, 150, 200)
+            button.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+        end
+    end
+
+    local function UpdateTPButton()
+        if isThirdPerson then
+            tpButton.Text = "3人称"
+            tpButton.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+            tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            tpButton.Text = "1人称"
+            tpButton.BackgroundColor3 = Color3.fromRGB(30, 30, 70)
+            tpButton.TextColor3 = Color3.fromRGB(200, 200, 255)
+        end
+    end
+
+    tpButton.MouseButton1Click:Connect(function()
+        if isThirdPerson then
+            DisableThirdPerson()
+        else
+            EnableThirdPerson()
+        end
+        UpdateTPButton()
+    end)
+
+    button.MouseButton1Click:Connect(function()
+        if isRunning then
+            StopKillAll()
+        else
+            StartKillAll()
+        end
+        UpdateButton()
+    end)
+
+    -- ドラッグ
+    local dragging = false
+    local dragStart = Vector2.new()
+    local frameStart = UDim2.new()
+
+    local function onInputBegan(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            frameStart = UDim2.new(
+                frame.Position.X.Scale,
+                frame.Position.X.Offset,
+                frame.Position.Y.Scale,
+                frame.Position.Y.Offset
+            )
+        end
+    end
+
+    local function onInputChanged(input)
+        if dragging then
+            if input.UserInputType == Enum.UserInputType.MouseMovement or
+               input.UserInputType == Enum.UserInputType.Touch then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(
+                    frameStart.X.Scale,
+                    frameStart.X.Offset + delta.X,
+                    frameStart.Y.Scale,
+                    frameStart.Y.Offset + delta.Y
+                )
+            end
+        end
+    end
+
+    local function onInputEnded(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end
+
+    title.InputBegan:Connect(onInputBegan)
+    title.InputChanged:Connect(onInputChanged)
+    title.InputEnded:Connect(onInputEnded)
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            local target = input.Position
+            local buttonPos = button.AbsolutePosition
+            local buttonSize = button.AbsoluteSize
+            if target.X >= buttonPos.X and target.X <= buttonPos.X + buttonSize.X and
+               target.Y >= buttonPos.Y and target.Y <= buttonPos.Y + buttonSize.Y then
+                return
+            end
+            local tpPos = tpButton.AbsolutePosition
+            local tpSize = tpButton.AbsoluteSize
+            if target.X >= tpPos.X and target.X <= tpPos.X + tpSize.X and
+               target.Y >= tpPos.Y and target.Y <= tpPos.Y + tpSize.Y then
+                return
+            end
+            onInputBegan(input)
+        end
+    end)
+
+    frame.InputChanged:Connect(onInputChanged)
+    frame.InputEnded:Connect(onInputEnded)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    UpdateButton()
+    UpdateTPButton()
+
+    return screenGui
+end
+
+CreateUI()
+
+game:BindToClose(function()
+    StopKillAll()
+    DisableThirdPerson()
+end)
+
+print("Kill All 起動完了！")

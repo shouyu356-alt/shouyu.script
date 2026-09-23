@@ -1,0 +1,256 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local StickyEvent = ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
+local SpawnToyRemoteFunction = ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction")
+local SetNetworkOwner = ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Root = Character:WaitForChild("HumanoidRootPart")
+local Humanoid = Character:WaitForChild("Humanoid")
+
+local isRunning = false
+local spawnedShurikens = {}
+local anchorConnection = nil
+local currentTarget = nil
+
+local function FWD(p, n, t)
+    return p:FindFirstChild(n) or p:WaitForChild(n, t or 5)
+end
+
+local function GetMag(a, b)
+    return (a.Position - b.Position).Magnitude
+end
+
+local function sno(part)
+    if part then
+        SetNetworkOwner:FireServer(part, part.CFrame)
+    end
+end
+
+local function getTargetObject()
+    local map = Workspace:FindFirstChild("Map")
+    if not map then
+        return nil
+    end
+    
+    local alwaysHere = map:FindFirstChild("AlwaysHereTweenedObjects")
+    if not alwaysHere then
+        return nil
+    end
+    
+    local ocean = alwaysHere:FindFirstChild("Ocean")
+    if not ocean then
+        return nil
+    end
+    
+    local object = ocean:FindFirstChild("Object")
+    if not object then
+        return nil
+    end
+    
+    local objectModel = object:FindFirstChild("ObjectModel")
+    if not objectModel then
+        return nil
+    end
+
+    local children = objectModel:GetChildren()
+    local index = 17
+    
+    if index <= #children then
+        local target = children[index]
+        if target and target:IsA("BasePart") then
+            return target, ocean
+        else
+            return nil
+        end
+    else
+        return nil
+    end
+end
+
+local function SpawnToy(ToyName)
+    local InPlot = LocalPlayer:FindFirstChild("InPlot")
+    local InOwnedPlot = LocalPlayer:FindFirstChild("InOwnedPlot")
+    local CanSpawnToy = LocalPlayer:FindFirstChild("CanSpawnToy")
+
+    if InPlot and InPlot.Value and InOwnedPlot and not InOwnedPlot.Value then
+        InPlot:GetPropertyChangedSignal("Value"):Wait()
+    end
+    if CanSpawnToy and not CanSpawnToy.Value then
+        CanSpawnToy:GetPropertyChangedSignal("Value"):Wait()
+    end
+
+    local MyPCLD = nil
+    for _, v in pairs(Workspace:GetChildren()) do
+        if v.Name == "PlayerCharacterLocationDetector" and GetMag(v, Root) <= 2 then
+            MyPCLD = v break
+        end
+    end
+
+    local SpawnCF = (MyPCLD or Root).CFrame * CFrame.new(0, 14, 20)
+    local Container = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+
+    if not Container then return nil end
+
+    local spawnedObject = nil
+    local conn
+    conn = Container.ChildAdded:Connect(function(child)
+        if child.Name == ToyName then
+            spawnedObject = child
+            conn:Disconnect()
+        end
+    end)
+
+    task.spawn(function()
+        pcall(function()
+            SpawnToyRemoteFunction:InvokeServer(ToyName, SpawnCF, Vector3.new(0, 0, 0))
+        end)
+    end)
+
+    local start = tick()
+    repeat
+        task.wait(0.05)
+    until spawnedObject or (tick() - start) > 3
+
+    if conn then
+        pcall(function() conn:Disconnect() end)
+    end
+
+    return spawnedObject
+end
+
+local function disableOceanCollision(oceanObject)
+    if not oceanObject then return end
+    
+    pcall(function()
+        oceanObject.Collision = false
+    end)
+end
+
+local function keepUnanchored(target)
+    if not target then return end
+    
+    if anchorConnection then
+        anchorConnection:Disconnect()
+        anchorConnection = nil
+    end
+    
+    currentTarget = target
+    
+    anchorConnection = target:GetPropertyChangedSignal("Anchored"):Connect(function()
+        if currentTarget and currentTarget.Anchored then
+            pcall(function()
+                currentTarget.Anchored = false
+            end)
+        end
+    end)
+    
+    pcall(function()
+        target.Anchored = false
+    end)
+end
+
+local function runUFOBreak()
+    if isRunning then
+        return
+    end
+
+    local targetObject, oceanObject = getTargetObject()
+    if not targetObject then
+        return
+    end
+
+    isRunning = true
+    
+    keepUnanchored(targetObject)
+
+    for i = 1, 12 do
+        if not isRunning then break end
+
+        local shuriken = SpawnToy("NinjaShuriken")
+        if shuriken then
+            local SP = FWD(shuriken, "StickyPart")
+            if SP then
+                sno(SP)
+
+                local BP = Instance.new("BodyPosition")
+                BP.Position = Vector3.new(math.random(-100, 100), 1e3, math.random(-100, 100))
+                BP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                BP.Parent = SP
+
+                table.insert(spawnedShurikens, shuriken)
+            end
+        end
+        task.wait(0.15)
+    end
+
+    local toysFolder = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+    if toysFolder then
+        local count = 0
+        local crazyCFrame = CFrame.new(0, -2.14748365e+09, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+        
+        for _, toy in ipairs(toysFolder:GetChildren()) do
+            if toy.Name == "NinjaShuriken" and toy:FindFirstChild("StickyPart") then
+                pcall(function()
+                    sno(toy.StickyPart)
+                    StickyEvent:FireServer(table.unpack({
+                        [1] = toy.StickyPart,
+                        [2] = targetObject,
+                        [3] = crazyCFrame,
+                    }))
+                    count = count + 1
+                end)
+                task.wait(0.05)
+            end
+        end
+    end
+
+    task.wait(0.5)
+    if oceanObject then
+        disableOceanCollision(oceanObject)
+    end
+    
+    isRunning = false
+end
+
+local function cleanup()
+    isRunning = false
+
+    if anchorConnection then
+        anchorConnection:Disconnect()
+        anchorConnection = nil
+    end
+    currentTarget = nil
+
+    for _, toy in ipairs(spawnedShurikens) do
+        if toy and toy.Parent then
+            pcall(function()
+                local destroyRem = ReplicatedStorage:FindFirstChild("MenuToys") and ReplicatedStorage.MenuToys:FindFirstChild("DestroyToy")
+                if destroyRem then
+                    destroyRem:FireServer(toy)
+                end
+            end)
+        end
+    end
+    spawnedShurikens = {}
+end
+
+task.spawn(function()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait(0.5)
+    end
+
+    task.wait(2)
+    runUFOBreak()
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(3)
+    cleanup()
+    task.wait(1)
+    runUFOBreak()
+end)

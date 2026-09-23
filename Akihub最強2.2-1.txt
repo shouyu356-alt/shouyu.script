@@ -1,0 +1,1931 @@
+-- Aki Hub 2.3 - Ultra Complete Edition
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+local LP = Players.LocalPlayer
+
+-- OrionLibをロード
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/jadpy/suki/refs/heads/main/orion"))()
+
+-- ====================================================================
+-- グローバル変数
+-- ====================================================================
+
+-- 線香花火用
+local IsGeometricActive = false
+local GeometricTargetName = "Sparkler"
+local CurrentPattern = "Circle"
+local Radius = 10
+local HeightOffset = 5
+local RotationSpeed = 1000
+local GeometricList = {}
+local geometricLoopConn = nil
+local tAccum = 0
+
+-- 羽モーション用
+local IsWingActive = false
+local WingTargetName = "Sparkler"
+local WingRadius = 10
+local WingHeightOffset = 5
+local WingSpeed = 1000
+local WingSpread = 10
+local WingList = {}
+local wingLoopConn = nil
+
+-- 上下往復回転モーション用（渦巻きタブ）
+local IsRotationActive = false
+local RotationTargetName = "Sparkler"
+local RotationRadius = 10
+local MinHeight = 2
+local MaxHeight = 8
+local RotationSpeed2 = 90
+local LiftSpeed = 1.5
+local LowerSpeed = 2.0
+local RotationSmoothness = 0.7
+local PlayerAvoidDistance = 3
+local RotationSafetyMargin = 1.5
+local RotationList = {}
+local rotationLoopConn = nil
+local partStates = {}
+
+-- サイレントエイム用
+local SilentAimEnabled = false
+local SilentAimRange = 30
+local oldNamecall = nil
+local SilentAimTarget = nil
+
+-- 全員テレポート用
+local AllTeleportActive = false
+local AllTeleportInterval = 0.5
+local AllTeleportIndex = 1
+
+-- Aki Hub機能
+local EggConfig = {
+    Grab = { 
+        KickGrab = false, 
+        KillGrab = false, 
+        VoidGrab = false, 
+        AnchorGrab = false,
+        ThrowPower = 250,
+        ThrowEnabled = false
+    },
+    Defense = { 
+        AntiGrab = false, 
+        AntiVoid = false, 
+        AntiExplode = false, 
+        AntiRagdoll = false, 
+        AntiGucci = false 
+    },
+    Camera = {
+        MaxZoom = 128,
+        SuperZoom = false
+    },
+    Player = { 
+        SpeedValue = 16, 
+        JumpValue = 50, 
+        SpeedEnabled = false,
+        JumpEnabled = false,
+        Noclip = false 
+    }
+}
+
+local EggDefenseTimer = 0
+
+-- オーラ機能用
+local affectedPlayers = {}
+local flingMemory = {}
+local funnyEffects = {}
+local AuraTimer = 0
+
+local Config = {
+    Aura = { 
+        KillAura = false, 
+        VoidAura = false, 
+        RagdollAura = false, 
+        FireAura = false, 
+        AnchorAura = false, 
+        NoclipAura = false,
+        BlastAura = false,
+        SpinAura = false,
+        FlingAura = false,
+        TeleportAura = false,
+        GlitchAura = false,
+        FreezeAura = false,
+        TornadoAura = false,
+        LazyAura = false,
+        HipMoveAura = false,
+        SlowLegsAura = false,
+        IrritateAura = false,
+        
+        BlastPower = 10000,
+        SpinSpeed = 100,
+        FlingPower = 5000,
+        HipMoveSpeed = 30,
+        SlowLegsSpeed = 5,
+        IrritateIntensity = 50,
+        Radius = 100,
+        Height = 100
+    },
+    Target = {
+        SelectedPlayer = nil,
+        KillAllLoop = false,
+        TeleportToTarget = false
+    }
+}
+
+-- ====================================================================
+-- ユーティリティ関数
+-- ====================================================================
+local function LocalHRP()
+    local c = LP and LP.Character or nil
+    if not c then return nil end
+    return c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum() 
+    local c = LP.Character 
+    if not c then return nil end 
+    return c:FindFirstChildOfClass("Humanoid") 
+end
+
+local function attachPhysics(p)
+    if not p or not p.Parent then return nil, nil end
+    pcall(function() p:SetNetworkOwner(LP) end)
+
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Massless = true
+
+    p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+    local bp = p:FindFirstChild("BodyPosition") or Instance.new("BodyPosition")
+    if not bp.Parent then
+        bp.Name = "BodyPosition"
+        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bp.P = 3e6
+        bp.D = 2000
+        bp.Position = p.Position
+        bp.Parent = p
+    end
+    local bg = p:FindFirstChild("BodyGyro") or Instance.new("BodyGyro")
+    if not bg.Parent then
+        bg.Name = "BodyGyro"
+        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bg.P = 3e6
+        bg.D = 1000
+        bg.CFrame = p.CFrame
+        bg.Parent = p
+    end
+
+    return bp, bg
+end
+
+local function detachPhysics(p)
+    if not p or not p.Parent then return end
+    local bp = p:FindFirstChild("BodyPosition"); if bp then bp:Destroy() end
+    local bg = p:FindFirstChild("BodyGyro"); if bg then bg:Destroy() end
+
+    p.CanCollide = true
+    p.CanTouch = true
+    p.CanQuery = true
+    p.Massless = false
+    pcall(function() p:SetNetworkOwner(nil) end)
+end
+
+-- ====================================================================
+-- サイレントエイム関数（簡易実装版）
+-- ====================================================================
+local function GetClosestPlayerInRange()
+    local closestPlayer = nil
+    local closestDistance = SilentAimRange
+    local localRoot = LocalHRP()
+    
+    if not localRoot then return nil end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LP and player.Character then
+            local character = player.Character
+            local humanoid = character:FindFirstChild("Humanoid")
+            local head = character:FindFirstChild("Head")
+            
+            if humanoid and humanoid.Health > 0 and head then
+                local distance = (localRoot.Position - head.Position).Magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = head
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+local function HookSilentAim()
+    if oldNamecall then return end
+    
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        
+        if SilentAimEnabled and tostring(method) == "Raycast" and self == workspace then
+            local target = GetClosestPlayerInRange()
+            if target then
+                -- ターゲットの位置に向かう方向を計算
+                local origin = args[1] or Vector3.new()
+                local direction = (target.Position - origin).Unit
+                args[3] = direction
+            end
+        end
+        
+        return oldNamecall(self, unpack(args))
+    end)
+end
+
+-- ====================================================================
+-- AKI HUB ユーティリティ関数
+-- ====================================================================
+local function SetNetworkOwner(part, cframe) 
+    if not part then return end 
+    pcall(function() 
+        if ReplicatedStorage:FindFirstChild("GrabEvents") and ReplicatedStorage.GrabEvents:FindFirstChild("SetNetworkOwner") then
+            ReplicatedStorage.GrabEvents.SetNetworkOwner:FireServer(part, cframe or LocalHRP().CFrame) 
+        end
+    end) 
+end
+
+local function Velocity(part, vel)
+    if not part or not part.Parent then return end
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+    bv.Velocity = vel
+    bv.Parent = part
+    Debris:AddItem(bv, 0.1)
+end
+
+local function MoveTo(part, targetCFrame)
+    if not part or not part.Parent then return end
+    for _, v in ipairs(part.Parent:GetDescendants()) do 
+        if v:IsA("BasePart") then v.CanCollide = false end 
+    end
+    local b = Instance.new("BodyPosition")
+    b.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+    b.Position = targetCFrame.Position
+    b.P, b.D = 2e4, 5e3
+    b.Parent = part
+    Debris:AddItem(b, 1)
+end
+
+local function ungrab(part) 
+    pcall(function() 
+        if ReplicatedStorage:FindFirstChild("GrabEvents") and ReplicatedStorage.GrabEvents:FindFirstChild("DestroyGrabLine") then
+            ReplicatedStorage.GrabEvents.DestroyGrabLine:FireServer(part) 
+        end
+    end) 
+end
+
+local function updateCameraZoom()
+    if EggConfig.Camera.SuperZoom then
+        LP.CameraMaxZoomDistance = 50000
+    else
+        LP.CameraMaxZoomDistance = EggConfig.Camera.MaxZoom
+    end
+end
+
+-- ====================================================================
+-- 線香花火制御ロジック（全16形状対応）
+-- ====================================================================
+local function rescanGeometricTargets()
+    for _,r in ipairs(GeometricList) do if r.part then detachPhysics(r.part) end end
+    GeometricList = {}
+    local currentTargets = {}
+
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("Part") and d.Name:match(GeometricTargetName) and not d.Anchored then
+            table.insert(currentTargets, {model=d.Parent or d, part=d})
+        elseif d:IsA("Model") and d.Name:match(GeometricTargetName) then
+            local part = d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart")
+            if part and not part.Anchored then table.insert(currentTargets, {model=d, part=part}) end
+        end
+    end
+    if #currentTargets == 0 then return end
+    for i, target in ipairs(currentTargets) do
+        local bp, bg = attachPhysics(target.part)
+        table.insert(GeometricList, {
+            model=target.model,
+            part=target.part,
+            id=i,
+            bp=bp,
+            bg=bg
+        })
+    end
+end
+
+local function getPatternTarget(i, n, t)
+    local root = LocalHRP(); if not root then return Vector3.new(0,0,0) end
+    local phase = t * (RotationSpeed / 100) + (i * 2 * math.pi / n)
+    local x, z, y = 0, 0, HeightOffset
+
+    if CurrentPattern == "Circle" then
+        x = Radius * math.cos(phase)
+        z = Radius * math.sin(phase)
+        
+    elseif CurrentPattern == "Square" then
+        local normalizedPhase = (phase % (2 * math.pi))
+        local side = math.floor(normalizedPhase / (math.pi / 2))
+        local progress = (normalizedPhase % (math.pi / 2)) / (math.pi / 2)
+        
+        if side == 0 then
+            x = Radius
+            z = -Radius + (2 * Radius * progress)
+        elseif side == 1 then
+            x = Radius - (2 * Radius * progress)
+            z = Radius
+        elseif side == 2 then
+            x = -Radius
+            z = Radius - (2 * Radius * progress)
+        else
+            x = -Radius + (2 * Radius * progress)
+            z = -Radius
+        end
+        
+    elseif CurrentPattern == "Triangle" then
+        local normalizedPhase = (phase % (2 * math.pi))
+        local side = math.floor(normalizedPhase / (2 * math.pi / 3))
+        local progress = (normalizedPhase % (2 * math.pi / 3)) / (2 * math.pi / 3)
+        
+        local angles = {math.pi / 2, math.pi / 2 + 2 * math.pi / 3, math.pi / 2 + 4 * math.pi / 3}
+        local x1 = Radius * math.cos(angles[side + 1])
+        local z1 = Radius * math.sin(angles[side + 1])
+        local x2 = Radius * math.cos(angles[(side + 1) % 3 + 1])
+        local z2 = Radius * math.sin(angles[(side + 1) % 3 + 1])
+        
+        x = x1 + (x2 - x1) * progress
+        z = z1 + (z2 - z1) * progress
+        
+    elseif CurrentPattern == "Pentagon" then
+        local normalizedPhase = (phase % (2 * math.pi))
+        local side = math.floor(normalizedPhase / (2 * math.pi / 5))
+        local progress = (normalizedPhase % (2 * math.pi / 5)) / (2 * math.pi / 5)
+        
+        local angle1 = (side / 5) * 2 * math.pi - math.pi / 2
+        local angle2 = ((side + 1) / 5) * 2 * math.pi - math.pi / 2
+        
+        local x1 = Radius * math.cos(angle1)
+        local z1 = Radius * math.sin(angle1)
+        local x2 = Radius * math.cos(angle2)
+        local z2 = Radius * math.sin(angle2)
+        
+        x = x1 + (x2 - x1) * progress
+        z = z1 + (z2 - z1) * progress
+        
+    elseif CurrentPattern == "Hexagon" then
+        local normalizedPhase = (phase % (2 * math.pi))
+        local side = math.floor(normalizedPhase / (2 * math.pi / 6))
+        local progress = (normalizedPhase % (2 * math.pi / 6)) / (2 * math.pi / 6)
+        
+        local angle1 = (side / 6) * 2 * math.pi
+        local angle2 = ((side + 1) / 6) * 2 * math.pi
+        
+        local x1 = Radius * math.cos(angle1)
+        local z1 = Radius * math.sin(angle1)
+        local x2 = Radius * math.cos(angle2)
+        local z2 = Radius * math.sin(angle2)
+        
+        x = x1 + (x2 - x1) * progress
+        z = z1 + (z2 - z1) * progress
+        
+    elseif CurrentPattern == "Octagon" then
+        local normalizedPhase = (phase % (2 * math.pi))
+        local side = math.floor(normalizedPhase / (2 * math.pi / 8))
+        local progress = (normalizedPhase % (2 * math.pi / 8)) / (2 * math.pi / 8)
+        
+        local angle1 = (side / 8) * 2 * math.pi
+        local angle2 = ((side + 1) / 8) * 2 * math.pi
+        
+        local x1 = Radius * math.cos(angle1)
+        local z1 = Radius * math.sin(angle1)
+        local x2 = Radius * math.cos(angle2)
+        local z2 = Radius * math.sin(angle2)
+        
+        x = x1 + (x2 - x1) * progress
+        z = z1 + (z2 - z1) * progress
+        
+    elseif CurrentPattern == "Star" then
+        local outerRadius = Radius
+        local innerRadius = Radius * 0.5
+        local points = 5
+        
+        local segment = phase % (2 * math.pi / points)
+        local point = math.floor(phase / (2 * math.pi / points))
+        
+        if point % 2 == 0 then
+            local startAngle = point * (2 * math.pi / points)
+            local endAngle = (point + 1) * (2 * math.pi / points)
+            local progress = segment / (2 * math.pi / points)
+            
+            x = math.cos(startAngle + (endAngle - startAngle) * progress) * outerRadius
+            z = math.sin(startAngle + (endAngle - startAngle) * progress) * outerRadius
+        else
+            local startAngle = point * (2 * math.pi / points)
+            local endAngle = (point + 1) * (2 * math.pi / points)
+            local progress = segment / (2 * math.pi / points)
+            
+            x = math.cos(startAngle + (endAngle - startAngle) * progress) * innerRadius
+            z = math.sin(startAngle + (endAngle - startAngle) * progress) * innerRadius
+        end
+        
+    elseif CurrentPattern == "Heart" then
+        local heartPhase = phase * 2
+        x = Radius * 16 * math.pow(math.sin(heartPhase), 3)
+        z = Radius * (13 * math.cos(heartPhase) - 5 * math.cos(2 * heartPhase) - 2 * math.cos(3 * heartPhase) - math.cos(4 * heartPhase))
+        x = x * 0.1
+        z = z * 0.1
+        
+    elseif CurrentPattern == "Spiral" then
+        local spiralFactor = 0.5
+        x = Radius * math.cos(phase) * math.exp(-spiralFactor * phase)
+        z = Radius * math.sin(phase) * math.exp(-spiralFactor * phase)
+        
+    elseif CurrentPattern == "Wave" then
+        x = Radius * math.cos(phase)
+        z = Radius * math.sin(phase * 2)
+        
+    elseif CurrentPattern == "Infinity" then
+        local infinityPhase = phase * 2
+        x = Radius * math.cos(infinityPhase) / (1 + math.pow(math.sin(infinityPhase), 2))
+        z = Radius * math.sin(infinityPhase) * math.cos(infinityPhase) / (1 + math.pow(math.sin(infinityPhase), 2))
+        
+    elseif CurrentPattern == "Diamond" then
+        local diamondPhase = phase % (math.pi / 2)
+        local diamondSide = math.floor(phase / (math.pi / 2)) % 4
+        
+        if diamondSide == 0 then
+            x = Radius * math.cos(diamondPhase)
+            z = Radius * math.sin(diamondPhase)
+        elseif diamondSide == 1 then
+            x = -Radius * math.sin(diamondPhase)
+            z = Radius * math.cos(diamondPhase)
+        elseif diamondSide == 2 then
+            x = -Radius * math.cos(diamondPhase)
+            z = -Radius * math.sin(diamondPhase)
+        else
+            x = Radius * math.sin(diamondPhase)
+            z = -Radius * math.cos(diamondPhase)
+        end
+        
+    elseif CurrentPattern == "Cross" then
+        local crossPhase = phase % (math.pi / 2)
+        local crossSide = math.floor(phase / (math.pi / 2)) % 4
+        
+        if crossSide == 0 then
+            x = Radius
+            z = Radius * math.tan(crossPhase)
+        elseif crossSide == 1 then
+            x = Radius * math.tan(math.pi/2 - crossPhase)
+            z = Radius
+        elseif crossSide == 2 then
+            x = -Radius
+            z = -Radius * math.tan(crossPhase)
+        else
+            x = -Radius * math.tan(math.pi/2 - crossPhase)
+            z = -Radius
+        end
+        
+    elseif CurrentPattern == "Arrow" then
+        local arrowPhase = phase % (2 * math.pi / 3)
+        local arrowSide = math.floor(phase / (2 * math.pi / 3)) % 3
+        
+        if arrowSide == 0 then
+            x = Radius * (1 - arrowPhase / (2 * math.pi / 3))
+            z = 0
+        elseif arrowSide == 1 then
+            local angle = math.pi / 3
+            x = Radius * math.cos(angle) * (arrowPhase / (2 * math.pi / 3))
+            z = Radius * math.sin(angle) * (arrowPhase / (2 * math.pi / 3))
+        else
+            local angle = -math.pi / 3
+            x = Radius * math.cos(angle) * (arrowPhase / (2 * math.pi / 3))
+            z = Radius * math.sin(angle) * (arrowPhase / (2 * math.pi / 3))
+        end
+        
+    elseif CurrentPattern == "Butterfly" then
+        local butterflyPhase = phase * 2
+        x = Radius * math.sin(butterflyPhase) * (math.exp(math.cos(butterflyPhase)) - 2 * math.cos(4 * butterflyPhase) - math.pow(math.sin(butterflyPhase / 12), 5))
+        z = Radius * math.cos(butterflyPhase) * (math.exp(math.cos(butterflyPhase)) - 2 * math.cos(4 * butterflyPhase) - math.pow(math.sin(butterflyPhase / 12), 5))
+        x = x * 0.3
+        z = z * 0.3
+        
+    elseif CurrentPattern == "Flower" then
+        local petals = 6
+        local flowerPhase = phase * petals
+        x = Radius * (1 + 0.3 * math.cos(petals * phase)) * math.cos(phase)
+        z = Radius * (1 + 0.3 * math.cos(petals * phase)) * math.sin(phase)
+    end
+    
+    return (root.CFrame * CFrame.new(x, y, z)).p
+end
+
+local function startGeometricLoop()
+    if geometricLoopConn then geometricLoopConn:Disconnect() end
+    tAccum = 0
+    rescanGeometricTargets()
+    if #GeometricList == 0 then 
+        IsGeometricActive = false 
+        return 
+    end
+
+    geometricLoopConn = RunService.Heartbeat:Connect(function(dt)
+        local root = LocalHRP(); if not root then return end
+        tAccum += dt
+
+        for j = #GeometricList, 1, -1 do
+            local rec = GeometricList[j]
+            if not rec.part or not rec.part.Parent then
+                table.remove(GeometricList, j)
+            else
+                rec.part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                rec.part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+                rec.bp.Position = getPatternTarget(j, #GeometricList, tAccum)
+                rec.bg.CFrame = root.CFrame
+            end
+        end
+    end)
+end
+
+-- ====================================================================
+-- 羽モーションロジック
+-- ====================================================================
+local function rescanWingTargets()
+    for _,r in ipairs(WingList) do if r.part then detachPhysics(r.part) end end
+    WingList = {}
+    local currentTargets = {}
+
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("Part") and d.Name:match(WingTargetName) and not d.Anchored then
+            table.insert(currentTargets, {model=d.Parent or d, part=d})
+        elseif d:IsA("Model") and d.Name:match(WingTargetName) then
+            local part = d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart")
+            if part and not part.Anchored then table.insert(currentTargets, {model=d, part=part}) end
+        end
+    end
+    if #currentTargets == 0 then return end
+    for i, target in ipairs(currentTargets) do
+        local bp, bg = attachPhysics(target.part)
+        table.insert(WingList, {
+            model=target.model,
+            part=target.part,
+            id=i,
+            bp=bp,
+            bg=bg
+        })
+    end
+end
+
+local function getWingPosition(i, n, t)
+    local root = LocalHRP(); if not root then return Vector3.new(0,0,0) end
+
+    local flapCycle = t * (WingSpeed / 500)
+    local side = (i <= math.ceil(n/2)) and 1 or -1
+    local wingIndex = (i <= math.ceil(n/2)) and i or (i - math.ceil(n/2))
+    local maxWingIndex = math.ceil(n/2)
+    local wingProgress = wingIndex / maxWingIndex
+    local flapAmount = math.sin(flapCycle + wingProgress * math.pi) * WingSpread
+
+    local x = side * (WingRadius * wingProgress + flapAmount * 0.5)
+    local y = WingHeightOffset + math.abs(math.sin(flapCycle + wingProgress * math.pi)) * (WingSpread * 0.5)
+    local z = math.sin(flapCycle * 0.5) * (WingRadius * 0.3) + (wingProgress * WingRadius * 0.2)
+
+    return (root.CFrame * CFrame.new(x, y, z)).p
+end
+
+local function startWingLoop()
+    if wingLoopConn then wingLoopConn:Disconnect() end
+    tAccum = 0
+    rescanWingTargets()
+    if #WingList == 0 then 
+        IsWingActive = false 
+        return 
+    end
+
+    wingLoopConn = RunService.Heartbeat:Connect(function(dt)
+        local root = LocalHRP(); if not root then return end
+        tAccum += dt
+
+        for j = #WingList, 1, -1 do
+            local rec = WingList[j]
+            if not rec.part or not rec.part.Parent then
+                table.remove(WingList, j)
+            else
+                rec.bp.Position = getWingPosition(j, #WingList, tAccum)
+                rec.bg.CFrame = root.CFrame
+            end
+        end
+    end)
+end
+
+-- ====================================================================
+-- 上下往復回転モーションロジック（渦巻きタブ）
+-- ====================================================================
+local function rescanRotationTargets()
+    for _,r in ipairs(RotationList) do 
+        if r.part and r.part.Parent then 
+            detachPhysics(r.part) 
+        end
+    end
+    RotationList = {}
+    partStates = {}
+    
+    local currentTargets = {}
+
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("Part") and d.Name:match(RotationTargetName) and not d.Anchored then
+            table.insert(currentTargets, {model=d.Parent or d, part=d})
+        elseif d:IsA("Model") and d.Name:match(RotationTargetName) then
+            local part = d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart")
+            if part and not part.Anchored then 
+                table.insert(currentTargets, {model=d, part=part}) 
+            end
+        end
+    end
+    
+    if #currentTargets == 0 then return end
+    
+    for i, target in ipairs(currentTargets) do
+        local bp, bg = attachPhysics(target.part)
+        
+        local startAngle = math.random(0, 360)
+        local isRising = math.random() > 0.5
+        
+        partStates[target.part] = {
+            angle = math.rad(startAngle),
+            height = MinHeight + (MaxHeight - MinHeight) * math.random(),
+            isRising = isRising,
+            heightOffset = math.random(0.2, 1.0)
+        }
+        
+        table.insert(RotationList, {
+            model = target.model,
+            part = target.part,
+            id = i,
+            bp = bp,
+            bg = bg,
+            lastPosition = target.part.Position
+        })
+    end
+end
+
+local function ensureSafeDistance(position, rotationIndex, totalRotations)
+    local root = LocalHRP()
+    if not root then return position end
+    
+    local playerPos = root.Position
+    local toPlayer = playerPos - position
+    local distance = toPlayer.Magnitude
+    
+    if distance < PlayerAvoidDistance then
+        local safeDirection = toPlayer.Unit * -1
+        local neededDistance = PlayerAvoidDistance - distance
+        position = position + safeDirection * (neededDistance + RotationSafetyMargin)
+    end
+    
+    return position
+end
+
+local function getBouncingRotationPosition(i, n, t, dt)
+    local root = LocalHRP()
+    if not root then return Vector3.new(0,0,0) end
+
+    local rec = RotationList[i]
+    if not rec or not partStates[rec.part] then return root.Position end
+    
+    local state = partStates[rec.part]
+    
+    state.angle = state.angle + math.rad(RotationSpeed2 * dt)
+    if state.angle > math.rad(360) then
+        state.angle = state.angle - math.rad(360)
+    end
+    
+    if state.isRising then
+        state.height = state.height + (LiftSpeed * dt * state.heightOffset)
+        if state.height >= MaxHeight then
+            state.height = MaxHeight
+            state.isRising = false
+        end
+    else
+        state.height = state.height - (LowerSpeed * dt * state.heightOffset)
+        if state.height <= MinHeight then
+            state.height = MinHeight
+            state.isRising = true
+        end
+    end
+    
+    local x = math.cos(state.angle) * RotationRadius
+    local z = math.sin(state.angle) * RotationRadius
+    local y = state.height
+    
+    local position = (root.CFrame * CFrame.new(x, y, z)).p
+    
+    return ensureSafeDistance(position, i, n)
+end
+
+local function getRotationOrientation(partPosition, root, state)
+    local toCenter = (root.Position - partPosition).Unit
+    local upVector = Vector3.new(0, 1, 0)
+    
+    local baseCF = CFrame.lookAt(partPosition, partPosition + toCenter)
+    
+    local tiltCF = baseCF * CFrame.fromEulerAnglesXYZ(
+        math.rad(15 * math.sin(state.angle)),
+        math.rad(10 * math.cos(state.angle)),
+        0
+    )
+    
+    return tiltCF
+end
+
+local function startRotationLoop()
+    if rotationLoopConn then rotationLoopConn:Disconnect() end
+    rescanRotationTargets()
+    if #RotationList == 0 then 
+        IsRotationActive = false 
+        return 
+    end
+
+    rotationLoopConn = RunService.Heartbeat:Connect(function(dt)
+        local root = LocalHRP()
+        if not root then return end
+
+        for j = #RotationList, 1, -1 do
+            local rec = RotationList[j]
+            if not rec.part or not rec.part.Parent then
+                partStates[rec.part] = nil
+                table.remove(RotationList, j)
+            else
+                local targetPos = getBouncingRotationPosition(j, #RotationList, 0, dt)
+                
+                if rec.lastPosition then
+                    local lerpFactor = 0.3
+                    local smoothPos = rec.lastPosition:Lerp(targetPos, lerpFactor)
+                    rec.bp.Position = smoothPos
+                    rec.lastPosition = smoothPos
+                else
+                    rec.bp.Position = targetPos
+                    rec.lastPosition = targetPos
+                end
+                
+                if partStates[rec.part] then
+                    local targetCF = getRotationOrientation(targetPos, root, partStates[rec.part])
+                    rec.bg.CFrame = targetCF
+                end
+            end
+        end
+    end)
+end
+
+-- ====================================================================
+-- 全員テレポート機能（隣にテレポート）
+-- ====================================================================
+local function GetPlayersInOrder()
+    local allPlayers = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LP and player.Character then
+            table.insert(allPlayers, player)
+        end
+    end
+    
+    -- 現在位置を基準にソート（近い順に）
+    local myHRP = LocalHRP()
+    if myHRP then
+        table.sort(allPlayers, function(a, b)
+            local charA = a.Character
+            local charB = b.Character
+            local hrpA = charA and charA:FindFirstChild("HumanoidRootPart")
+            local hrpB = charB and charB:FindFirstChild("HumanoidRootPart")
+            
+            if hrpA and hrpB then
+                local distA = (myHRP.Position - hrpA.Position).Magnitude
+                local distB = (myHRP.Position - hrpB.Position).Magnitude
+                return distA < distB
+            end
+            return true
+        end)
+    end
+    
+    return allPlayers
+end
+
+local function TeleportToPlayer(player)
+    if not player or player == LP then return end
+    local targetChar = player.Character
+    if not targetChar then return end
+    local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then return end
+    
+    local myHRP = LocalHRP()
+    if not myHRP then return end
+    
+    -- 横（隣）にテレポート（カメラの向きに5ユニット横）
+    local camera = Workspace.CurrentCamera
+    local cameraCF = camera.CFrame
+    local rightVector = cameraCF.RightVector
+    local teleportPosition = targetHRP.Position + (rightVector * 5)
+    
+    myHRP.CFrame = CFrame.new(teleportPosition, targetHRP.Position)
+    print("テレポート先: " .. player.Name)
+end
+
+local function StartAllTeleportLoop()
+    if AllTeleportActive then return end
+    AllTeleportActive = true
+    AllTeleportIndex = 1
+    
+    local allPlayers = GetPlayersInOrder()
+    
+    if #allPlayers == 0 then
+        AllTeleportActive = false
+        return
+    end
+    
+    task.spawn(function()
+        while AllTeleportActive do
+            local player = allPlayers[AllTeleportIndex]
+            if player then
+                TeleportToPlayer(player)
+            end
+            
+            AllTeleportIndex = AllTeleportIndex + 1
+            if AllTeleportIndex > #allPlayers then
+                AllTeleportIndex = 1
+            end
+            
+            task.wait(AllTeleportInterval)
+        end
+    end)
+end
+
+local function StopAllTeleportLoop()
+    AllTeleportActive = false
+end
+
+-- ====================================================================
+-- オーラ関数
+-- ====================================================================
+local function GetNearPartsInSphere(origin, radius, height)
+    local sphere = Instance.new("Part")
+    sphere.Size = Vector3.new(radius * 2, height * 2, radius * 2)
+    sphere.Position = origin
+    sphere.Anchored = true
+    sphere.CanCollide = false
+    sphere.Transparency = 1
+    sphere.Parent = Workspace
+    
+    local parts = Workspace:GetPartsInPart(sphere)
+    sphere:Destroy()
+    
+    local partsInSphere = {}
+    for _, part in ipairs(parts) do
+        local distance = (part.Position - origin).Magnitude
+        local heightDiff = math.abs(part.Position.Y - origin.Y)
+        
+        if distance <= radius and heightDiff <= height / 2 then
+            table.insert(partsInSphere, part)
+        end
+    end
+    
+    return partsInSphere
+end
+
+local function MakeSlowLegs(character)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = Config.Aura.SlowLegsSpeed
+        affectedPlayers[character] = true
+    end
+end
+
+local function IrritatePlayer(character)
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if root then
+        for i = 1, 10 do
+            task.spawn(function()
+                task.wait(i * 0.05)
+                local offset = Vector3.new(
+                    math.random(-Config.Aura.IrritateIntensity, Config.Aura.IrritateIntensity),
+                    math.random(-Config.Aura.IrritateIntensity/2, Config.Aura.IrritateIntensity/2),
+                    math.random(-Config.Aura.IrritateIntensity, Config.Aura.IrritateIntensity)
+                )
+                Velocity(root, offset)
+            end)
+        end
+    end
+end
+
+local function getPlayerInfo(player)
+    local displayName = player.DisplayName
+    local username = player.Name
+    local userId = player.UserId
+    return string.format("%s (@%s) [ID: %d]", displayName, username, userId)
+end
+
+local function updatePlayerList()
+    local playerList = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LP then
+            table.insert(playerList, getPlayerInfo(player))
+        end
+    end
+    return playerList
+end
+
+local function getPlayerFromInfo(info)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if getPlayerInfo(player) == info then
+            return player
+        end
+    end
+    return nil
+end
+
+local function KillPlayer(player)
+    if not player or not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    local myPos = LocalHRP()
+    if not myPos then return end
+    
+    local myPosCF = myPos.CFrame
+    myPos.CFrame = root.CFrame + Vector3.new(0, -6, 0)
+    task.wait(0.1)
+    
+    for i = 1, 4 do 
+        SetNetworkOwner(root, myPos.CFrame) 
+        task.wait(0.05) 
+    end
+    
+    MoveTo(root, CFrame.new(4096, -75, 4096))
+    Velocity(root, Vector3.new(0, -1000, 0))
+    
+    task.wait(0.3)
+    myPos.CFrame = myPosCF
+end
+
+-- ====================================================================
+-- AKI HUB 関数
+-- ====================================================================
+RunService.Heartbeat:Connect(function(dt)
+    EggDefenseTimer = EggDefenseTimer + dt
+    local root, hum = LocalHRP(), getHum()
+    if not root or not hum then return end
+    
+    if EggConfig.Player.JumpEnabled then
+        hum.JumpPower = EggConfig.Player.JumpValue
+    end
+    
+    if EggConfig.Player.SpeedEnabled then
+        hum.WalkSpeed = EggConfig.Player.SpeedValue
+    end
+    
+    if EggConfig.Player.Noclip and LP.Character then
+        for _, v in ipairs(LP.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end
+    
+    if EggDefenseTimer >= 0.1 then
+        if EggConfig.Defense.AntiGrab then 
+            pcall(function() 
+                if ReplicatedStorage:FindFirstChild("CharacterEvents") and ReplicatedStorage.CharacterEvents:FindFirstChild("Struggle") then
+                    ReplicatedStorage.CharacterEvents.Struggle:FireServer(LP) 
+                end
+                if ReplicatedStorage:FindFirstChild("GameCorrectionEvents") and ReplicatedStorage.GameCorrectionEvents:FindFirstChild("StopAllVelocity") then
+                    ReplicatedStorage.GameCorrectionEvents.StopAllVelocity:FireServer() 
+                end
+            end) 
+        end
+        
+        if EggConfig.Defense.AntiVoid and root.Position.Y < -87.5 then 
+            root.CFrame = CFrame.new(0, 10, 0) 
+        end
+        
+        if EggConfig.Defense.AntiRagdoll and hum:GetState() == Enum.HumanoidStateType.Ragdoll then 
+            hum:ChangeState(Enum.HumanoidStateType.Running) 
+        end
+        
+        EggDefenseTimer = 0
+    end
+    
+    updateCameraZoom()
+end)
+
+Workspace.ChildAdded:Connect(function(v)
+    if v.Name == "GrabParts" and v:IsA("Model") then
+        local GrabPart = v:FindFirstChild("GrabPart")
+        if not GrabPart then return end
+        local WeldConstraint = GrabPart:FindFirstChild("WeldConstraint")
+        if not WeldConstraint or not WeldConstraint.Part1 then return end
+        local target = WeldConstraint.Part1
+        
+        v:GetPropertyChangedSignal("Parent"):Connect(function()
+            if not v.Parent and target and target.Parent then
+                if EggConfig.Grab.ThrowEnabled then
+                    local throwVel = Instance.new("BodyVelocity")
+                    throwVel.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+                    throwVel.Velocity = Workspace.CurrentCamera.CFrame.LookVector * EggConfig.Grab.ThrowPower
+                    throwVel.Parent = target
+                    Debris:AddItem(throwVel, 0.1)
+                end
+            end
+        end)
+        
+        task.spawn(function()
+            task.wait(0.1)
+            
+            if EggConfig.Grab.VoidGrab then 
+                SetNetworkOwner(target) 
+                Velocity(target, Vector3.new(0, 10000, 0)) 
+            end
+            
+            if EggConfig.Grab.KillGrab then 
+                SetNetworkOwner(target) 
+                MoveTo(target, CFrame.new(4096, -75, 4096)) 
+                Velocity(target, Vector3.new(0, -1000, 0)) 
+            end
+            
+            if EggConfig.Grab.KickGrab then
+                local player = Players:GetPlayerFromCharacter(target.Parent)
+                if player then 
+                    SetNetworkOwner(target) 
+                    MoveTo(target, CFrame.new(25e25, 25e25, 25e25)) 
+                    task.wait(0.5) 
+                    ungrab(target) 
+                end
+            end
+            
+            if EggConfig.Grab.AnchorGrab then
+                SetNetworkOwner(target)
+                local pos = target.CFrame
+                for _ = 1, 2 do
+                    SetNetworkOwner(target)
+                    local bp = Instance.new("BodyPosition")
+                    bp.Position = pos.Position
+                    bp.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+                    bp.Parent = target
+                    local bg = Instance.new("BodyGyro")
+                    bg.CFrame = pos
+                    bg.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
+                    bg.Parent = target
+                    task.wait(0.5)
+                end
+            end
+        end)
+    end
+end)
+
+-- ====================================================================
+-- UI セットアップ
+-- ====================================================================
+local Window = OrionLib:MakeWindow({
+    Name = "AKI HUB",
+    HidePremium = false,
+    SaveConfig = true,
+    IntroEnabled = false,
+    ConfigFolder = "AkiHubConfig"
+})
+
+-- 線香花火制御タブ
+local SparklerTab = Window:MakeTab({
+    Name = "スパークラー",
+    Icon = "rbxassetid://7734068495",
+    PremiumOnly = false
+})
+
+SparklerTab:AddToggle({
+    Name = "有効化",
+    Default = false,
+    Callback = function(Value)
+        IsGeometricActive = Value
+        if Value then
+            startGeometricLoop()
+        else
+            if geometricLoopConn then geometricLoopConn:Disconnect() end
+        end
+    end
+})
+
+SparklerTab:AddDropdown({
+    Name = "形状選択",
+    Default = "Circle",
+    Options = {"Circle", "Square", "Triangle", "Pentagon", "Hexagon", "Octagon", "Star", "Heart", "Spiral", "Wave", "Infinity", "Diamond", "Cross", "Arrow", "Butterfly", "Flower"},
+    Callback = function(Value)
+        CurrentPattern = Value
+        tAccum = 0
+    end
+})
+
+SparklerTab:AddSlider({
+    Name = "サイズ",
+    Min = 2,
+    Max = 150,
+    Default = 10,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "半径",
+    Callback = function(Value)
+        Radius = Value
+    end
+})
+
+SparklerTab:AddSlider({
+    Name = "高さ",
+    Min = -100,
+    Max = 100,
+    Default = 5,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "深度",
+    Callback = function(Value)
+        HeightOffset = Value
+    end
+})
+
+SparklerTab:AddSlider({
+    Name = "回転速度",
+    Min = 10,
+    Max = 3000,
+    Default = 1000,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "速度",
+    Callback = function(Value)
+        RotationSpeed = Value
+    end
+})
+
+-- 羽モーション制御タブ
+local WingTab = Window:MakeTab({
+    Name = "羽モーション",
+    Icon = "rbxassetid://7733674079",
+    PremiumOnly = false
+})
+
+WingTab:AddToggle({
+    Name = "有効化",
+    Default = false,
+    Callback = function(Value)
+        IsWingActive = Value
+        if Value then
+            startWingLoop()
+        else
+            if wingLoopConn then wingLoopConn:Disconnect() end
+        end
+    end
+})
+
+WingTab:AddSlider({
+    Name = "羽のサイズ",
+    Min = 2,
+    Max = 50,
+    Default = 10,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "サイズ",
+    Callback = function(Value)
+        WingRadius = Value
+    end
+})
+
+WingTab:AddSlider({
+    Name = "羽の広がり",
+    Min = 1,
+    Max = 30,
+    Default = 10,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "広がり",
+    Callback = function(Value)
+        WingSpread = Value
+    end
+})
+
+WingTab:AddSlider({
+    Name = "高さ",
+    Min = -50,
+    Max = 50,
+    Default = 5,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "深度",
+    Callback = function(Value)
+        WingHeightOffset = Value
+    end
+})
+
+WingTab:AddSlider({
+    Name = "羽ばたき速度",
+    Min = 10,
+    Max = 3000,
+    Default = 1000,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "速度",
+    Callback = function(Value)
+        WingSpeed = Value
+    end
+})
+
+-- 渦巻きタブ
+local VortexTab = Window:MakeTab({
+    Name = "渦巻き",
+    Icon = "rbxassetid://7733774602",
+    PremiumOnly = false
+})
+
+VortexTab:AddToggle({
+    Name = "有効化",
+    Default = false,
+    Callback = function(Value)
+        IsRotationActive = Value
+        if Value then
+            startRotationLoop()
+        else
+            if rotationLoopConn then rotationLoopConn:Disconnect() end
+        end
+    end
+})
+
+VortexTab:AddSlider({
+    Name = "回転速度",
+    Min = 30,
+    Max = 300,
+    Default = 90,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "度/秒",
+    Callback = function(Value)
+        RotationSpeed2 = Value
+    end
+})
+
+VortexTab:AddSlider({
+    Name = "回転半径",
+    Min = 5,
+    Max = 25,
+    Default = 10,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "スタディウム",
+    Callback = function(Value)
+        RotationRadius = Value
+    end
+})
+
+VortexTab:AddSlider({
+    Name = "最低高さ",
+    Min = 0,
+    Max = 10,
+    Default = 2,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 0.5,
+    ValueName = "スタディウム",
+    Callback = function(Value)
+        MinHeight = Value
+        if MaxHeight <= MinHeight then
+            MaxHeight = MinHeight + 1
+        end
+    end
+})
+
+VortexTab:AddSlider({
+    Name = "最高高さ",
+    Min = 5,
+    Max = 20,
+    Default = 8,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 0.5,
+    ValueName = "スタディウム",
+    Callback = function(Value)
+        MaxHeight = Value
+        if MaxHeight <= MinHeight then
+            MinHeight = MaxHeight - 1
+        end
+    end
+})
+
+-- サイレントエイムタブ
+local SilentAimTab = Window:MakeTab({
+    Name = "サイレントエイム",
+    Icon = "rbxassetid://10709781460",
+    PremiumOnly = false
+})
+
+SilentAimTab:AddSection({
+    Name = "サイレントエイム設定"
+})
+
+SilentAimTab:AddSlider({
+    Name = "エイム範囲",
+    Min = 5,
+    Max = 100,
+    Default = 30,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "スタディウム",
+    Callback = function(value)
+        SilentAimRange = value
+    end
+})
+
+SilentAimTab:AddToggle({
+    Name = "サイレントエイムON/OFF",
+    Default = false,
+    Callback = function(state)
+        SilentAimEnabled = state
+        
+        if state then
+            HookSilentAim()
+            OrionLib:MakeNotification({
+                Name = "サイレントエイム",
+                Content = "サイレントエイムを有効化しました",
+                Image = "rbxassetid://4483345998",
+                Time = 3
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "サイレントエイム",
+                Content = "サイレントエイムを無効化しました",
+                Image = "rbxassetid://4483345998",
+                Time = 3
+            })
+        end
+    end
+})
+
+SilentAimTab:AddButton({
+    Name = "ターゲット情報取得",
+    Callback = function()
+        local target = GetClosestPlayerInRange()
+        if target then
+            local player = Players:GetPlayerFromCharacter(target.Parent)
+            if player then
+                OrionLib:MakeNotification({
+                    Name = "ターゲット情報",
+                    Content = "ターゲット: " .. player.Name .. " 距離: " .. math.floor((target.Position - LocalHRP().Position).Magnitude) .. " スタディウム",
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+            end
+        else
+            OrionLib:MakeNotification({
+                Name = "ターゲット情報",
+                Content = "指定された範囲には、プレイヤーは、いませんでした",
+                Image = "rbxassetid://7743870134",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- 掴み機能タブ
+local GrabTab = Window:MakeTab({
+    Name = "掴み機能",
+    Icon = "rbxassetid://7733798691",
+    PremiumOnly = false
+})
+
+GrabTab:AddSection({
+    Name = "掴みオプション"
+})
+
+GrabTab:AddToggle({
+    Name = "キック掴み",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Grab.KickGrab = Value
+    end
+})
+
+GrabTab:AddToggle({
+    Name = "キル掴み",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Grab.KillGrab = Value
+    end
+})
+
+GrabTab:AddToggle({
+    Name = "奈落掴み",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Grab.VoidGrab = Value
+    end
+})
+
+GrabTab:AddToggle({
+    Name = "固定掴み",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Grab.AnchorGrab = Value
+    end
+})
+
+GrabTab:AddSection({
+    Name = "投げる強さ設定"
+})
+
+GrabTab:AddToggle({
+    Name = "投げる強さON/OFF",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Grab.ThrowEnabled = Value
+    end
+})
+
+GrabTab:AddSlider({
+    Name = "投げる強さ",
+    Min = 0,
+    Max = 1000,
+    Default = 250,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "強さ",
+    Callback = function(Value)
+        EggConfig.Grab.ThrowPower = Value
+    end
+})
+
+-- 防御機能タブ
+local DefenseTab = Window:MakeTab({
+    Name = "防御機能",
+    Icon = "rbxassetid://6034509993",
+    PremiumOnly = false
+})
+
+DefenseTab:AddSection({
+    Name = "防御オプション"
+})
+
+DefenseTab:AddToggle({
+    Name = "アンチ掴み",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Defense.AntiGrab = Value
+    end
+})
+
+DefenseTab:AddToggle({
+    Name = "アンチ奈落",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Defense.AntiVoid = Value
+    end
+})
+
+DefenseTab:AddToggle({
+    Name = "アンチ爆発",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Defense.AntiExplode = Value
+    end
+})
+
+DefenseTab:AddToggle({
+    Name = "アンチグッチ",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Defense.AntiGucci = Value
+    end
+})
+
+DefenseTab:AddToggle({
+    Name = "アンチラグドール",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Defense.AntiRagdoll = Value
+    end
+})
+
+-- 視点設定タブ
+local CameraTab = Window:MakeTab({
+    Name = "視点設定",
+    Icon = "rbxassetid://7733798407",
+    PremiumOnly = false
+})
+
+CameraTab:AddSection({
+    Name = "カメラメニュー"
+})
+
+CameraTab:AddToggle({
+    Name = "自由視点",
+    Default = false,
+    Callback = function(Value)
+        EggConfig.Camera.SuperZoom = Value
+        updateCameraZoom()
+    end
+})
+
+CameraTab:AddSlider({
+    Name = "ズーム距離",
+    Min = 0,
+    Max = 500,
+    Default = 0,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "距離",
+    Callback = function(Value)
+        EggConfig.Camera.MaxZoom = Value
+        updateCameraZoom()
+    end
+})
+
+-- プレイヤー設定タブ
+local PlayerTab = Window:MakeTab({
+    Name = "プレイヤー設定",
+    Icon = "rbxassetid://7733793319",
+    PremiumOnly = false
+})
+
+PlayerTab:AddSection({
+    Name = "ジャンプ設定"
+})
+
+PlayerTab:AddSlider({
+    Name = "ジャンプ力",
+    Min = 50,
+    Max = 500,
+    Default = 50,
+    Increment = 1,
+    Callback = function(v)
+        EggConfig.Player.JumpValue = v
+        if EggConfig.Player.JumpEnabled then
+            local hum = getHum()
+            if hum then
+                hum.JumpPower = v
+            end
+        end
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "ジャンプブースト",
+    Default = false,
+    Callback = function(v)
+        EggConfig.Player.JumpEnabled = v
+        local hum = getHum()
+        if hum then
+            if v then
+                hum.JumpPower = EggConfig.Player.JumpValue
+            end
+        end
+    end
+})
+
+PlayerTab:AddSection({
+    Name = "スピード設定"
+})
+
+PlayerTab:AddSlider({
+    Name = "スピード値",
+    Min = 16,
+    Max = 200,
+    Default = 16,
+    Increment = 1,
+    Callback = function(v)
+        EggConfig.Player.SpeedValue = v
+        if EggConfig.Player.SpeedEnabled then
+            local hum = getHum()
+            if hum then
+                hum.WalkSpeed = v
+            end
+        end
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "スピードブースト",
+    Default = false,
+    Callback = function(v)
+        EggConfig.Player.SpeedEnabled = v
+        local hum = getHum()
+        if hum then
+            if v then
+                hum.WalkSpeed = EggConfig.Player.SpeedValue
+            end
+        end
+    end
+})
+
+PlayerTab:AddSection({
+    Name = "その他設定"
+})
+
+PlayerTab:AddToggle({
+    Name = "ノークリップ",
+    Default = false,
+    Callback = function(v)
+        EggConfig.Player.Noclip = v
+    end
+})
+
+-- オーラ機能タブ
+local AuraTab = Window:MakeTab({
+    Name = "オーラ機能",
+    Icon = "rbxassetid://7733793319",
+    PremiumOnly = false
+})
+
+AuraTab:AddSection({ Name = "基本オーラ" })
+
+AuraTab:AddToggle({ Name = "キルオーラ", Default = false, Callback = function(v) Config.Aura.KillAura = v end })
+AuraTab:AddToggle({ Name = "奈落オーラ", Default = false, Callback = function(v) Config.Aura.VoidAura = v end })
+AuraTab:AddToggle({ Name = "ラグドールオーラ", Default = false, Callback = function(v) Config.Aura.RagdollAura = v end })
+AuraTab:AddToggle({ Name = "ぶっ飛ばしオーラ", Default = false, Callback = function(v) Config.Aura.BlastAura = v end })
+AuraTab:AddToggle({ Name = "回転オーラ", Default = false, Callback = function(v) Config.Aura.SpinAura = v end })
+AuraTab:AddToggle({ Name = "投げ飛ばしオーラ", Default = false, Callback = function(v) Config.Aura.FlingAura = v end })
+AuraTab:AddToggle({ Name = "足遅オーラ", Default = false, Callback = function(v) Config.Aura.SlowLegsAura = v end })
+AuraTab:AddToggle({ Name = "イライラオーラ", Default = false, Callback = function(v) Config.Aura.IrritateAura = v end })
+
+AuraTab:AddSection({ Name = "パラメータ設定" })
+
+AuraTab:AddSlider({ Name = "オーラ半径", Min = 10, Max = 500, Default = 100, Increment = 10, Callback = function(v) Config.Aura.Radius = v end })
+AuraTab:AddSlider({ Name = "オーラ高さ", Min = 10, Max = 500, Default = 100, Increment = 10, Callback = function(v) Config.Aura.Height = v end })
+AuraTab:AddSlider({ Name = "吹っ飛ばし威力", Min = 1000, Max = 10000, Default = 5000, Increment = 100, Callback = function(v) Config.Aura.BlastPower = v end })
+AuraTab:AddSlider({ Name = "回転速度", Min = 10, Max = 500, Default = 100, Increment = 10, Callback = function(v) Config.Aura.SpinSpeed = v end })
+AuraTab:AddSlider({ Name = "投げ飛ばし威力", Min = 1000, Max = 10000, Default = 3000, Increment = 100, Callback = function(v) Config.Aura.FlingPower = v end })
+AuraTab:AddSlider({ Name = "足の遅さ", Min = 1, Max = 16, Default = 5, Increment = 1, Callback = function(v) Config.Aura.SlowLegsSpeed = v end })
+AuraTab:AddSlider({ Name = "イライラ強度", Min = 10, Max = 100, Default = 30, Increment = 5, Callback = function(v) Config.Aura.IrritateIntensity = v end })
+
+-- ターゲット機能タブ
+local TargetTab = Window:MakeTab({ 
+    Name = "ターゲット機能", 
+    Icon = "rbxassetid://7733765398",
+    PremiumOnly = false 
+})
+
+TargetTab:AddSection({ Name = "プレイヤー選択" })
+
+local PlayerDropdown = TargetTab:AddDropdown({
+    Name = "プレイヤーを選択",
+    Default = "",
+    Options = updatePlayerList(),
+    Callback = function(value)
+        Config.Target.SelectedPlayer = getPlayerFromInfo(value)
+    end
+})
+
+TargetTab:AddButton({
+    Name = "プレイヤーリスト更新",
+    Callback = function()
+        PlayerDropdown:Refresh(updatePlayerList(), true)
+    end
+})
+
+TargetTab:AddSection({ Name = "ターゲット操作" })
+
+TargetTab:AddToggle({
+    Name = "ターゲットに自動テレポート",
+    Default = false,
+    Callback = function(v)
+        Config.Target.TeleportToTarget = v
+    end
+})
+
+TargetTab:AddButton({
+    Name = "選択したプレイヤーをキル",
+    Callback = function()
+        if Config.Target.SelectedPlayer then
+            KillPlayer(Config.Target.SelectedPlayer)
+        end
+    end
+})
+
+TargetTab:AddSection({ Name = "全プレイヤー操作" })
+
+TargetTab:AddToggle({
+    Name = "全プレイヤー連続キル",
+    Default = false,
+    Callback = function(v)
+        Config.Target.KillAllLoop = v
+    end
+})
+
+-- 全員テレポートタブ
+local TeleportTab = Window:MakeTab({ 
+    Name = "全員テレポート", 
+    Icon = "rbxassetid://7733798407",
+    PremiumOnly = false 
+})
+
+TeleportTab:AddSection({ Name = "全員テレポート設定" })
+
+TeleportTab:AddToggle({
+    Name = "全員テレポートON/OFF",
+    Default = false,
+    Callback = function(v)
+        if v then
+            StartAllTeleportLoop()
+        else
+            StopAllTeleportLoop()
+        end
+    end
+})
+
+TeleportTab:AddSlider({
+    Name = "テレポート間隔",
+    Min = 0.1,
+    Max = 2.0,
+    Default = 0.5,
+    Increment = 0.1,
+    ValueName = "秒",
+    Callback = function(v)
+        AllTeleportInterval = v
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "全プレイヤーキル",
+    Callback = function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LP and player.Character then
+                KillPlayer(player)
+                task.wait(0.2)
+            end
+        end
+    end
+})
+
+-- ====================================================================
+-- UI初期化
+-- ====================================================================
+OrionLib:Init()
+
+-- 初期化
+LP.CameraMode = Enum.CameraMode.Classic
+LP.CameraMinZoomDistance = 0.5
+updateCameraZoom()
+
+-- サイレントエイムフック初期化
+task.spawn(function()
+    task.wait(3)
+    HookSilentAim()
+    print("サイレントエイムフック初期化完了")
+end)
+
+-- キャラクター追加時の処理
+LP.CharacterAdded:Connect(function(character)
+    task.wait(0.5)
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if EggConfig.Player.JumpEnabled then
+            hum.JumpPower = EggConfig.Player.JumpValue
+        end
+        if EggConfig.Player.SpeedEnabled then
+            hum.WalkSpeed = EggConfig.Player.SpeedValue
+        end
+    end
+end)
+
+-- 既存のキャラクターに設定を適用
+if LP.Character then
+    local hum = getHum()
+    if hum then
+        if EggConfig.Player.JumpEnabled then
+            hum.JumpPower = EggConfig.Player.JumpValue
+        end
+        if EggConfig.Player.SpeedEnabled then
+            hum.WalkSpeed = EggConfig.Player.SpeedValue
+        end
+    end
+end
+
+-- ====================================================================
+-- オーラループ
+-- ====================================================================
+RunService.Heartbeat:Connect(function(dt)
+    AuraTimer = AuraTimer + dt
+    local root = LocalHRP()
+    if not root then return end
+    
+    if Config.Target.TeleportToTarget and Config.Target.SelectedPlayer then
+        local targetChar = Config.Target.SelectedPlayer.Character
+        if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+            root.CFrame = targetChar.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
+        end
+    end
+    
+    if AuraTimer >= 0.5 then
+        local anyAuraActive = false
+        for _, v in pairs(Config.Aura) do
+            if type(v) == "boolean" and v then
+                anyAuraActive = true
+                break
+            end
+        end
+        
+        if anyAuraActive then
+            local nearParts = GetNearPartsInSphere(root.Position, Config.Aura.Radius, Config.Aura.Height)
+            
+            for _, part in ipairs(nearParts) do
+                if part.Name == "HumanoidRootPart" and not part:IsDescendantOf(LP.Character) then
+                    local character = part.Parent
+                    SetNetworkOwner(part)
+                    
+                    affectedPlayers[character] = true
+                    
+                    if Config.Aura.SlowLegsAura then MakeSlowLegs(character) end
+                    if Config.Aura.IrritateAura then IrritatePlayer(character) end
+                    
+                    if Config.Aura.BlastAura then 
+                        local direction = (part.Position - root.Position).Unit
+                        Velocity(part, direction * Config.Aura.BlastPower)
+                    end
+                    if Config.Aura.SpinAura then 
+                        local bav = Instance.new("BodyAngularVelocity")
+                        bav.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
+                        bav.AngularVelocity = Vector3.new(0, Config.Aura.SpinSpeed, 0)
+                        bav.Parent = part
+                        Debris:AddItem(bav, 0.1)
+                    end
+                    if Config.Aura.FlingAura then 
+                        flingMemory[character] = true
+                        local randomDir = Vector3.new(
+                            math.random(-100, 100),
+                            math.random(50, 100),
+                            math.random(-100, 100)
+                        ).Unit
+                        Velocity(part, randomDir * Config.Aura.FlingPower)
+                    end
+                    if Config.Aura.KillAura then 
+                        MoveTo(part, CFrame.new(4096, -75, 4096)) 
+                        Velocity(part, Vector3.new(0, -1000, 0)) 
+                    end
+                    if Config.Aura.VoidAura then Velocity(part, Vector3.new(0, 10000, 0)) end
+                end
+            end
+        end
+        AuraTimer = 0
+    end
+    
+    for character, _ in pairs(affectedPlayers) do
+        if character and character.Parent then
+            if Config.Aura.SlowLegsAura then
+                MakeSlowLegs(character)
+            end
+            
+            if Config.Aura.IrritateAura then
+                IrritatePlayer(character)
+            end
+            
+            if flingMemory[character] and Config.Aura.FlingAura then
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local randomDir = Vector3.new(
+                        math.random(-100, 100),
+                        math.random(50, 100),
+                        math.random(-100, 100)
+                    ).Unit
+                    Velocity(root, randomDir * Config.Aura.FlingPower / 2)
+                end
+            end
+        else
+            affectedPlayers[character] = nil
+            flingMemory[character] = nil
+        end
+    end
+    
+    if Config.Target.KillAllLoop then
+        task.spawn(function()
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LP and player.Character then
+                    KillPlayer(player)
+                    task.wait(0.5)
+                end
+            end
+        end)
+    end
+end)
+
+print("==========================================")
+print("Aki Hub 2.0 - Ultra Complete Edition")
+print("読み込み完了")
+print("==========================================")
+print("機能:")
+print("✓ 16種類の形状制御")
+print("✓ 羽モーション機能")
+print("✓ 渦巻きモーション機能")
+print("✓ サイレントエイム機能")
+print("✓ Aki Hub機能（掴み、防御、強化）")
+print("✓ オーラ機能")
+print("✓ ターゲット機能")
+print("✓ 全員テレポート機能")
+print("==========================================")
