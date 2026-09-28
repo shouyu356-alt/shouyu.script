@@ -1,0 +1,174 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+if PlayerGui:FindFirstChild("CompactPlotBreaker") then
+    PlayerGui.CompactPlotBreaker:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CompactPlotBreaker"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 180, 0, 100)
+mainFrame.Position = UDim2.new(0, 50, 0, 50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 6)
+corner.Parent = mainFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -50, 0, 25)
+titleLabel.Position = UDim2.new(0, 8, 0, 2)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Plot Breaker"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 11
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = mainFrame
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 18, 0, 18)
+closeBtn.Position = UDim2.new(1, -22, 0, 4)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextSize = 11
+closeBtn.Parent = mainFrame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 3)
+closeCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+local isMinimized = false
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 18, 0, 18)
+minBtn.Position = UDim2.new(1, -44, 0, 4)
+minBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+minBtn.Text = "-"
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.Font = Enum.Font.SourceSansBold
+minBtn.TextSize = 11
+minBtn.Parent = mainFrame
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 3)
+minCorner.Parent = minBtn
+
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, 0, 1, -28)
+contentContainer.Position = UDim2.new(0, 0, 0, 28)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = mainFrame
+
+minBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        mainFrame.Size = UDim2.new(0, 180, 0, 30)
+        contentContainer.Visible = false
+        minBtn.Text = "+"
+    else
+        mainFrame.Size = UDim2.new(0, 180, 0, 100)
+        contentContainer.Visible = true
+        minBtn.Text = "-"
+    end
+end)
+
+local breakAllShurikenBtn = Instance.new("TextButton")
+breakAllShurikenBtn.Size = UDim2.new(1, -16, 0, 36)
+breakAllShurikenBtn.Position = UDim2.new(0, 8, 0, 8)
+breakAllShurikenBtn.BackgroundColor3 = Color3.fromRGB(140, 30, 30)
+breakAllShurikenBtn.Text = "Break All Plots (1-5)"
+breakAllShurikenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+breakAllShurikenBtn.Font = Enum.Font.GothamBold
+breakAllShurikenBtn.TextSize = 11
+breakAllShurikenBtn.Parent = contentContainer
+
+local b1Corner = Instance.new("UICorner")
+b1Corner.CornerRadius = UDim.new(0, 4)
+b1Corner.Parent = breakAllShurikenBtn
+
+local function getHRP()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return LocalPlayer.Character.HumanoidRootPart
+    else
+        local character = LocalPlayer.CharacterAdded:Wait()
+        return character:WaitForChild("HumanoidRootPart")
+    end
+end
+
+breakAllShurikenBtn.MouseButton1Click:Connect(function()
+    local inv = workspace:FindFirstChild(LocalPlayer.Name.."SpawnedInToys")
+    if not inv then return end
+
+    local currentHRP = getHRP()
+    if not currentHRP then return end
+
+    task.spawn(function()
+        for i = 1, 5 do
+            local shur = nil
+            local conn = inv.ChildAdded:Connect(function(child)
+                if child.Name == "NinjaShuriken" then
+                    shur = child
+                    conn:Disconnect()
+                end
+            end)
+
+            ReplicatedStorage.MenuToys.SpawnToyRemoteFunction:InvokeServer("NinjaShuriken", currentHRP.CFrame * CFrame.new(5, 8, 20), Vector3.new(0, 0, 0))
+
+            local startTime = tick()
+            repeat
+                if shur and shur:FindFirstChild("StickyPart") and shur:FindFirstChild("SoundPart") then
+                    break
+                end
+                task.wait(0.01)
+            until tick() - startTime > 0.5
+            shur = shur or inv:FindFirstChild("NinjaShuriken")
+
+            if shur then
+                local soundPart = shur:FindFirstChild("SoundPart")
+                local stickyPart = shur:FindFirstChild("StickyPart")
+                if soundPart and stickyPart then
+                    local setOwner = ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
+                    for j = 1, 15 do
+                        setOwner:FireServer(soundPart, soundPart.CFrame)
+                        if soundPart:FindFirstChild("PartOwner") and soundPart.PartOwner.Value == LocalPlayer.Name then break end
+                    end
+
+                    for _, obj in pairs(shur:GetChildren()) do
+                        if obj:IsA("BasePart") then
+                            obj.CanTouch = false
+                            obj.CanCollide = false
+                            obj.Transparency = 1
+                        end
+                    end
+                    shur.Name = "Noclipped"
+
+                    local plot = workspace.Plots:FindFirstChild("Plot" .. i)
+                    if plot then
+                        local plotArea = plot:FindFirstChild("PlotArea")
+                        if plotArea then
+                            ReplicatedStorage.PlayerEvents.StickyPartEvent:FireServer(stickyPart, plotArea, CFrame.new(1e12, 1e12, 1e12))
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end)
